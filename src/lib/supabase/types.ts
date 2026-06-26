@@ -64,6 +64,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
+        Relationships: [];
       };
       patients: {
         Row: {
@@ -95,6 +96,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["patients"]["Insert"]>;
+        Relationships: [];
       };
       audio_recordings: {
         Row: {
@@ -118,6 +120,7 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["audio_recordings"]["Insert"]
         >;
+        Relationships: [];
       };
       transcriptions: {
         Row: {
@@ -139,6 +142,7 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["transcriptions"]["Insert"]
         >;
+        Relationships: [];
       };
       clinical_notes: {
         Row: {
@@ -170,6 +174,7 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["clinical_notes"]["Insert"]
         >;
+        Relationships: [];
       };
       tasks: {
         Row: {
@@ -211,6 +216,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["tasks"]["Insert"]>;
+        Relationships: [];
       };
       audit_log: {
         Row: {
@@ -234,6 +240,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
+        Relationships: [];
       };
     };
     Views: Record<never, never>;

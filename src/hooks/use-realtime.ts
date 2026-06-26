@@ -9,14 +9,22 @@ import type { Task } from "@/lib/supabase/types";
 // useRealtimeTasks(ward) — subscribes to INSERT/UPDATE on the tasks table for a
 // ward and keeps a live in-memory list (Tech Spec §2.3, channel `tasks:ward=…`).
 //
-// Day 4 plumbing: the nurse + control-tower UIs land in Day 5, but this hook +
-// the channel are wired now so the realtime path is testable in DevTools (Task
-// 4.7). Subscribes with the anon browser client; delivery relies on the demo
-// SELECT policy added in migration 002 (Realtime honours RLS).
+// Powers the nurse board, control tower, and doctor approval feed (Day 5). Seed
+// the list with server-fetched rows via `initialTasks`; realtime events merge on
+// top. Optional onInsert/onUpdate callbacks fire for toasts + the live feed.
+// Subscribes with the anon browser client; delivery relies on the demo SELECT
+// policy from migration 002 (Realtime honours RLS).
 //
-// Writes never happen here — tasks are created server-side by /api/dispatch.
+// Writes never happen here — tasks change via the server-side task API routes.
 
 export type RealtimeStatus = "connecting" | "subscribed" | "error" | "closed";
+
+interface UseRealtimeTasksOptions {
+  initialTasks?: Task[];
+  debug?: boolean;
+  onInsert?: (task: Task) => void;
+  onUpdate?: (task: Task, prev: Partial<Task>) => void;
+}
 
 interface UseRealtimeTasksResult {
   tasks: Task[];
@@ -27,12 +35,21 @@ interface UseRealtimeTasksResult {
 
 export function useRealtimeTasks(
   ward: string,
-  { initialTasks = [], debug = false }: { initialTasks?: Task[]; debug?: boolean } = {},
+  {
+    initialTasks = [],
+    debug = false,
+    onInsert,
+    onUpdate,
+  }: UseRealtimeTasksOptions = {},
 ): UseRealtimeTasksResult {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [status, setStatus] = useState<RealtimeStatus>("connecting");
   const [eventCount, setEventCount] = useState(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
+
+  // Keep latest callbacks in refs so they don't force a resubscribe.
+  const cbRef = useRef({ onInsert, onUpdate });
+  cbRef.current = { onInsert, onUpdate };
 
   useEffect(() => {
     const supabase = createClient();
@@ -55,9 +72,11 @@ export function useRealtimeTasks(
             setTasks((prev) =>
               prev.some((x) => x.id === row.id) ? prev : [row, ...prev],
             );
+            cbRef.current.onInsert?.(row);
           } else if (payload.eventType === "UPDATE") {
             const row = payload.new as Task;
             setTasks((prev) => prev.map((x) => (x.id === row.id ? row : x)));
+            cbRef.current.onUpdate?.(row, payload.old as Partial<Task>);
           } else if (payload.eventType === "DELETE") {
             const old = payload.old as Partial<Task>;
             setTasks((prev) => prev.filter((x) => x.id !== old.id));

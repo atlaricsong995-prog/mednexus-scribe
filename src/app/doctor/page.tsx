@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Stethoscope } from "lucide-react";
 
 import { PatientCard } from "@/components/patient-card";
+import { ApprovalsPanel } from "@/components/approvals-panel";
 import { createClient } from "@/lib/supabase/server";
+import { getWardData } from "@/lib/server/ward-data";
 import { WARD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +17,9 @@ export default async function DoctorPage() {
     .eq("ward", WARD)
     .eq("active", true)
     .order("bed_number");
+
+  // Live approvals feed (submitted nurse tasks) — see ApprovalsPanel.
+  const { patients: patientLites, tasks } = await getWardData(WARD);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-8">
@@ -42,6 +47,12 @@ export default async function DoctorPage() {
           ← Switch role
         </Link>
       </header>
+
+      <ApprovalsPanel
+        ward={WARD}
+        initialTasks={tasks}
+        patients={patientLites}
+      />
 
       {error && (
         <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">

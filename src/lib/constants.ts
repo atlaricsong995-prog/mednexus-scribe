@@ -4,6 +4,8 @@ export const WARD = "Ward 5A";
 
 // Seeded demo identities (supabase/seed — Tech Spec §7).
 export const DEMO_DOCTOR_ID = "00000000-0000-0000-0000-000000000001";
+export const DEMO_NURSE_ID = "00000000-0000-0000-0000-000000000002";
+export const DEMO_HEAD_NURSE_ID = "00000000-0000-0000-0000-000000000003";
 
 export const AUDIO_BUCKET = "audio-recordings";
 

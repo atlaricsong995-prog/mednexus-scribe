@@ -1,0 +1,79 @@
+// PATCH /api/tasks/[id]/complete (Task 5.3)
+// Nurse marks a task done → status='submitted' with the completion value/notes,
+// awaiting doctor approval. The UPDATE rides Supabase Realtime to /doctor (for
+// approval) and /control-tower (live feed). Server-side service-role only.
+import { NextResponse } from "next/server";
+
+import { createAdminClient } from "@/lib/supabase/admin";
+import { DEMO_NURSE_ID } from "@/lib/constants";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } },
+) {
+  const taskId = params.id;
+  let body: { value?: string; notes?: string } = {};
+  try {
+    body = await req.json();
+  } catch {
+    // body is optional — observations may have a value, simple tasks may not.
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: task, error: fetchErr } = await supabase
+    .from("tasks")
+    .select("id, status")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (fetchErr || !task) {
+    return NextResponse.json({ error: "Task not found." }, { status: 404 });
+  }
+  if (task.status !== "pending" && task.status !== "in_progress") {
+    return NextResponse.json(
+      { error: `Task cannot be completed from status '${task.status}'.` },
+      { status: 409 },
+    );
+  }
+
+  const submittedAt = new Date().toISOString();
+  const { data: updated, error: updateErr } = await supabase
+    .from("tasks")
+    .update({
+      status: "submitted",
+      completion_value: body.value?.trim() || null,
+      completion_notes: body.notes?.trim() || null,
+      completed_by: DEMO_NURSE_ID,
+      submitted_at: submittedAt,
+    })
+    .eq("id", taskId)
+    .select("*")
+    .single();
+
+  if (updateErr || !updated) {
+    return NextResponse.json(
+      { error: `Could not submit task: ${updateErr?.message ?? "unknown"}` },
+      { status: 500 },
+    );
+  }
+
+  await supabase.from("audit_log").insert({
+    actor_id: DEMO_NURSE_ID,
+    actor_role: "nurse",
+    action: "complete_task",
+    entity_type: "task",
+    entity_id: taskId,
+    metadata: {
+      patient_id: updated.patient_id,
+      ward: updated.ward,
+      completion_value: updated.completion_value,
+      completion_notes: updated.completion_notes,
+    },
+  });
+
+  return NextResponse.json({ task: updated });
+}

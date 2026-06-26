@@ -34,6 +34,15 @@ export interface NurseTask {
   priority: "low" | "normal" | "high" | "critical";
 }
 
+// D-008 medication safety flag, persisted on clinical_notes.safety_flags (Day 4).
+// Structurally mirrors SafetyFlagSchema in lib/ai/schemas.ts (the Zod source).
+export interface SafetyFlag {
+  type: "allergy" | "dose" | "duplicate";
+  drug: string;
+  reason: string;
+  severity: "critical" | "warning";
+}
+
 export type Role = "doctor" | "nurse" | "head_nurse" | "mo" | "patient";
 export type NoteStatus = "draft" | "confirmed" | "archived";
 export type TaskType = "medication" | "observation" | "procedure" | "other";
@@ -154,6 +163,7 @@ export interface Database {
           medications: Medication[];
           nurse_tasks: NurseTask[];
           icd10_suggestions: string[] | null;
+          safety_flags: SafetyFlag[];
           status: NoteStatus;
           confirmed_at: string | null;
           created_at: string;
@@ -167,6 +177,7 @@ export interface Database {
           medications: Medication[];
           nurse_tasks: NurseTask[];
           icd10_suggestions?: string[] | null;
+          safety_flags?: SafetyFlag[];
           status?: NoteStatus;
           confirmed_at?: string | null;
           created_at?: string;

@@ -7,7 +7,8 @@ import {
   ListChecks,
   ShieldAlert,
   ShieldCheck,
-  Send,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 import {
@@ -18,9 +19,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/confirm-button";
 import { cn } from "@/lib/utils";
-import type { Medication, NurseTask, MedicalNote } from "@/lib/supabase/types";
-import type { SafetyFlag } from "@/lib/ai/schemas";
+import type {
+  Medication,
+  NurseTask,
+  MedicalNote,
+  SafetyFlag,
+} from "@/lib/supabase/types";
 
 export interface NoteReviewData {
   noteId: string;
@@ -46,6 +52,21 @@ const PRIORITY_STYLES: Record<NurseTask["priority"], string> = {
   critical: "bg-red-100 text-red-700",
 };
 
+const EMPTY_MED: Medication = {
+  drug: "",
+  dose: "",
+  route: "",
+  frequency: "",
+  duration: "",
+};
+
+const EMPTY_TASK: NurseTask = {
+  task: "",
+  when: "",
+  conditions: null,
+  priority: "normal",
+};
+
 const textareaCls =
   "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
@@ -57,9 +78,10 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Day 3 review surface: 4 cards. Note / Meds / Tasks are editable in place
-// (state held locally — confirm & dispatch is wired on Day 4). Safety Flags are
-// display-only (D-008, not persisted yet).
+// Day 4 review surface: 4 cards. Note / Meds / Tasks are editable in place
+// (text inputs + add/remove rows). Safety Flags are display-only (D-008). The
+// Confirm button dispatches the edited note → tasks via /api/dispatch, gated by
+// the D-008 override when a critical flag is present.
 export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
   const [note, setNote] = useState<MedicalNote>(data.medical_note);
   const [meds, setMeds] = useState<Medication[]>(data.medications);
@@ -69,15 +91,29 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
     setMeds((prev) =>
       prev.map((m, idx) => (idx === i ? { ...m, [key]: value } : m)),
     );
+  const addMed = () => setMeds((prev) => [...prev, { ...EMPTY_MED }]);
+  const removeMed = (i: number) =>
+    setMeds((prev) => prev.filter((_, idx) => idx !== i));
 
-  const updateTask = (
-    i: number,
-    key: keyof NurseTask,
-    value: string,
-  ) =>
+  const updateTask = (i: number, key: keyof NurseTask, value: string) =>
     setTasks((prev) =>
-      prev.map((t, idx) => (idx === i ? { ...t, [key]: value } : t)),
+      prev.map((t, idx) =>
+        idx === i
+          ? {
+              ...t,
+              [key]:
+                key === "conditions" && value === "" ? null : value,
+            }
+          : t,
+      ),
     );
+  const addTask = () => setTasks((prev) => [...prev, { ...EMPTY_TASK }]);
+  const removeTask = (i: number) =>
+    setTasks((prev) => prev.filter((_, idx) => idx !== i));
+
+  const criticalFlags = data.safety_flags.filter(
+    (f) => f.severity === "critical",
+  );
 
   return (
     <div className="space-y-4">
@@ -137,8 +173,16 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
           {meds.map((m, i) => (
             <div
               key={i}
-              className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 sm:grid-cols-5"
+              className="relative grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 sm:grid-cols-5"
             >
+              <button
+                type="button"
+                onClick={() => removeMed(i)}
+                aria-label="Remove medication"
+                className="absolute right-1.5 top-1.5 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
               <div className="col-span-2 sm:col-span-1">
                 <FieldLabel>Drug</FieldLabel>
                 <Input
@@ -181,6 +225,15 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
               </div>
             </div>
           ))}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={addMed}
+            className="w-full border-dashed text-slate-500"
+          >
+            <Plus className="h-4 w-4" />
+            Add medication
+          </Button>
         </CardContent>
       </Card>
 
@@ -204,19 +257,32 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
               className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3"
             >
               <div className="flex items-start gap-2">
-                <span
+                <select
+                  value={t.priority}
+                  onChange={(e) => updateTask(i, "priority", e.target.value)}
                   className={cn(
-                    "mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                    "mt-0.5 shrink-0 rounded-full border-0 px-2 py-0.5 text-xs font-medium capitalize focus:outline-none focus:ring-1 focus:ring-slate-300",
                     PRIORITY_STYLES[t.priority],
                   )}
                 >
-                  {t.priority}
-                </span>
+                  <option value="low">low</option>
+                  <option value="normal">normal</option>
+                  <option value="high">high</option>
+                  <option value="critical">critical</option>
+                </select>
                 <Input
                   value={t.task}
                   onChange={(e) => updateTask(i, "task", e.target.value)}
                   className="bg-white"
                 />
+                <button
+                  type="button"
+                  onClick={() => removeTask(i)}
+                  aria-label="Remove task"
+                  className="mt-0.5 shrink-0 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -241,6 +307,15 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
               </div>
             </div>
           ))}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={addTask}
+            className="w-full border-dashed text-slate-500"
+          >
+            <Plus className="h-4 w-4" />
+            Add task
+          </Button>
         </CardContent>
       </Card>
 
@@ -298,16 +373,17 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
         </CardContent>
       </Card>
 
-      {/* Day 4: wires /api/dispatch → tasks + realtime. */}
-      <div className="flex flex-col items-stretch gap-1 pt-1">
-        <Button disabled className="w-full">
-          <Send className="h-4 w-4" />
-          Confirm &amp; dispatch (Day 4)
-        </Button>
-        <p className="text-center text-xs text-slate-400">
-          Draft saved. Dispatch to nurses arrives in the next build.
-        </p>
-      </div>
+      {/* Confirm → /api/dispatch → tasks + realtime (Task 4.2). */}
+      <ConfirmButton
+        noteId={data.noteId}
+        criticalFlags={criticalFlags}
+        getPayload={() => ({
+          medical_note: note,
+          medications: meds,
+          nurse_tasks: tasks,
+          safety_flags: data.safety_flags,
+        })}
+      />
     </div>
   );
 }

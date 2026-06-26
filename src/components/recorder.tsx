@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Mic, Square, Loader2, RotateCcw, Check, UploadCloud } from "lucide-react";
+import { useState } from "react";
+import { Mic, Square, Loader2, RotateCcw, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useRecorder } from "@/hooks/use-recorder";
 import { uploadRecording } from "@/app/doctor/actions";
+import {
+  NoteReviewPanel,
+  type NoteReviewData,
+} from "@/components/note-review-panel";
 import { cn } from "@/lib/utils";
 
 function fmt(total: number): string {
@@ -16,6 +20,22 @@ function fmt(total: number): string {
   const s = (total % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 }
+
+// Pipeline phases after the doctor stops recording (Day 3, Task 3.4):
+// upload → transcribe (Groq) → extract (Gemini) → review cards.
+type Phase =
+  | "uploading"
+  | "transcribing"
+  | "analyzing"
+  | "done"
+  | "error"
+  | null;
+
+const PHASE_LABEL: Record<Exclude<Phase, null | "done" | "error">, string> = {
+  uploading: "Saving recording…",
+  transcribing: "Transcribing to English…",
+  analyzing: "Extracting clinical note…",
+};
 
 export function Recorder({ patientId }: { patientId: string }) {
   const {
@@ -30,10 +50,15 @@ export function Recorder({ patientId }: { patientId: string }) {
     reset,
   } = useRecorder();
   const { toast } = useToast();
-  const [isUploading, startUpload] = useTransition();
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
 
-  function handleUpload() {
+  const [phase, setPhase] = useState<Phase>(null);
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [note, setNote] = useState<NoteReviewData | null>(null);
+
+  const busy =
+    phase === "uploading" || phase === "transcribing" || phase === "analyzing";
+
+  async function runPipeline() {
     if (!audioBlob) return;
     const ext = audioBlob.type.includes("mp4") ? "m4a" : "webm";
     const form = new FormData();
@@ -41,111 +66,168 @@ export function Recorder({ patientId }: { patientId: string }) {
     form.append("patientId", patientId);
     form.append("durationSeconds", String(seconds));
 
-    startUpload(async () => {
-      const result = await uploadRecording(form);
-      if (result.ok) {
-        setUploadedUrl(result.playbackUrl || audioUrl);
-        toast({
-          title: "Recording uploaded ✓",
-          description: `${fmt(result.durationSeconds)} saved to patient record.`,
-        });
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Upload failed",
-          description: result.error,
-        });
-      }
-    });
+    try {
+      setPhase("uploading");
+      const upload = await uploadRecording(form);
+      if (!upload.ok) throw new Error(upload.error);
+
+      setPhase("transcribing");
+      const tRes = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioId: upload.recordingId,
+          storagePath: upload.storagePath,
+        }),
+      });
+      const tData = await tRes.json();
+      if (!tRes.ok) throw new Error(tData.error ?? "Transcription failed.");
+      setTranscript(tData.text);
+
+      setPhase("analyzing");
+      const eRes = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcriptionId: tData.transcriptionId,
+          patientId,
+        }),
+      });
+      const eData = await eRes.json();
+      if (!eRes.ok) throw new Error(eData.error ?? "Extraction failed.");
+
+      setNote(eData as NoteReviewData);
+      setPhase("done");
+    } catch (err) {
+      setPhase("error");
+      toast({
+        variant: "destructive",
+        title: "Pipeline failed",
+        description: err instanceof Error ? err.message : "Unknown error.",
+      });
+    }
+  }
+
+  function startOver() {
+    setPhase(null);
+    setTranscript(null);
+    setNote(null);
+    reset();
   }
 
   return (
-    <div className="flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      {/* Mic button */}
-      {status !== "review" && (
-        <button
-          type="button"
-          onClick={status === "recording" ? stop : start}
-          disabled={!supported}
-          aria-label={status === "recording" ? "Stop recording" : "Start recording"}
-          className={cn(
-            "relative flex h-24 w-24 items-center justify-center rounded-full text-white shadow-lg transition-all focus:outline-none focus-visible:ring-4 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40",
-            status === "recording"
-              ? "bg-red-600 hover:bg-red-700 focus-visible:ring-red-300"
-              : "bg-slate-900 hover:bg-slate-800 focus-visible:ring-slate-300",
-          )}
-        >
-          {status === "recording" && (
-            <span className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-40" />
-          )}
-          {status === "recording" ? (
-            <Square className="h-8 w-8 fill-current" />
-          ) : (
-            <Mic className="h-9 w-9" />
-          )}
-        </button>
-      )}
+    <div className="space-y-4">
+      <div className="flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* Mic button (hidden once reviewing) */}
+        {status !== "review" && (
+          <button
+            type="button"
+            onClick={status === "recording" ? stop : start}
+            disabled={!supported}
+            aria-label={
+              status === "recording" ? "Stop recording" : "Start recording"
+            }
+            className={cn(
+              "relative flex h-24 w-24 items-center justify-center rounded-full text-white shadow-lg transition-all focus:outline-none focus-visible:ring-4 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40",
+              status === "recording"
+                ? "bg-red-600 hover:bg-red-700 focus-visible:ring-red-300"
+                : "bg-slate-900 hover:bg-slate-800 focus-visible:ring-slate-300",
+            )}
+          >
+            {status === "recording" && (
+              <span className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-40" />
+            )}
+            {status === "recording" ? (
+              <Square className="h-8 w-8 fill-current" />
+            ) : (
+              <Mic className="h-9 w-9" />
+            )}
+          </button>
+        )}
 
-      {/* Status line */}
-      {status === "idle" && (
-        <p className="text-sm text-slate-500">
-          {supported
-            ? "Tap to dictate your ward-round note"
-            : "Audio recording is not supported on this browser."}
-        </p>
-      )}
-
-      {status === "recording" && (
-        <div className="flex items-center gap-2 text-lg font-semibold tabular-nums text-red-600">
-          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-600" />
-          {fmt(seconds)}
-        </div>
-      )}
-
-      {/* Review state */}
-      {status === "review" && audioUrl && (
-        <div className="flex w-full flex-col items-center gap-4">
-          <p className="text-sm font-medium text-slate-700">
-            Recorded {fmt(seconds)}
+        {status === "idle" && (
+          <p className="text-sm text-slate-500">
+            {supported
+              ? "Tap to dictate your ward-round note"
+              : "Audio recording is not supported on this browser."}
           </p>
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-          <audio src={uploadedUrl ?? audioUrl} controls className="w-full" />
+        )}
 
-          {uploadedUrl ? (
-            <div className="flex items-center gap-2 text-sm font-medium text-emerald-600">
-              <Check className="h-4 w-4" /> Saved to patient record
-            </div>
-          ) : (
-            <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-              <Button onClick={handleUpload} disabled={isUploading}>
-                {isUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <UploadCloud className="h-4 w-4" />
-                )}
-                {isUploading ? "Uploading…" : "Upload recording"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={reset}
-                disabled={isUploading}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Re-record
-              </Button>
-            </div>
-          )}
+        {status === "recording" && (
+          <div className="flex items-center gap-2 text-lg font-semibold tabular-nums text-red-600">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-600" />
+            {fmt(seconds)}
+          </div>
+        )}
 
-          {uploadedUrl && (
-            <Button variant="outline" size="sm" onClick={reset}>
-              <Mic className="h-4 w-4" />
-              New recording
-            </Button>
-          )}
+        {/* Review / pipeline state */}
+        {status === "review" && audioUrl && (
+          <div className="flex w-full flex-col items-center gap-4">
+            <p className="text-sm font-medium text-slate-700">
+              Recorded {fmt(seconds)}
+            </p>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <audio src={audioUrl} controls className="w-full" />
+
+            {phase === null && (
+              <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
+                <Button onClick={runPipeline}>
+                  <Sparkles className="h-4 w-4" />
+                  Upload &amp; analyze
+                </Button>
+                <Button variant="outline" onClick={reset}>
+                  <RotateCcw className="h-4 w-4" />
+                  Re-record
+                </Button>
+              </div>
+            )}
+
+            {busy && (
+              <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {PHASE_LABEL[phase as keyof typeof PHASE_LABEL]}
+              </div>
+            )}
+
+            {phase === "error" && (
+              <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
+                <Button onClick={runPipeline}>
+                  <RotateCcw className="h-4 w-4" />
+                  Retry
+                </Button>
+                <Button variant="outline" onClick={startOver}>
+                  <Mic className="h-4 w-4" />
+                  New recording
+                </Button>
+              </div>
+            )}
+
+            {phase === "done" && (
+              <Button variant="outline" size="sm" onClick={startOver}>
+                <Mic className="h-4 w-4" />
+                New recording
+              </Button>
+            )}
+          </div>
+        )}
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </div>
+
+      {/* English transcript preview */}
+      {transcript && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+            English transcript
+          </p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+            {transcript}
+          </p>
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {/* Structured review cards */}
+      {note && <NoteReviewPanel data={note} />}
     </div>
   );
 }

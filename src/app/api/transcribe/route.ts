@@ -1,0 +1,109 @@
+// POST /api/transcribe (Tech Spec §3.1)
+// Downloads the persisted audio artifact, runs Groq Whisper -> English, and saves
+// the transcriptions row. Runs server-side with the service-role admin client
+// (the demo has no Supabase auth session, so anon writes are blocked by RLS).
+import { NextResponse } from "next/server";
+
+import { createAdminClient } from "@/lib/supabase/admin";
+import { transcribeToEnglish } from "@/lib/ai/groq";
+import { AUDIO_BUCKET, WHISPER_MODEL } from "@/lib/constants";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function POST(req: Request) {
+  const started = Date.now();
+
+  let body: { audioId?: string; storagePath?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const { audioId, storagePath } = body;
+  if (!audioId || !storagePath) {
+    return NextResponse.json(
+      { error: "Missing audioId or storagePath." },
+      { status: 400 },
+    );
+  }
+
+  const supabase = createAdminClient();
+
+  // Pull the raw audio back from Storage (private bucket).
+  const { data: blob, error: dlError } = await supabase.storage
+    .from(AUDIO_BUCKET)
+    .download(storagePath);
+
+  if (dlError || !blob) {
+    return NextResponse.json(
+      { error: `Could not load audio: ${dlError?.message ?? "not found"}` },
+      { status: 500 },
+    );
+  }
+
+  // Whisper translation (retry once, then fail — Tech Spec §3.1).
+  let transcript: { text: string; language: string | null };
+  try {
+    transcript = await transcribeToEnglish(blob, blob.type || "audio/webm");
+  } catch {
+    try {
+      transcript = await transcribeToEnglish(blob, blob.type || "audio/webm");
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: `Transcription failed: ${
+            err instanceof Error ? err.message : "unknown"
+          }`,
+        },
+        { status: 500 },
+      );
+    }
+  }
+
+  const { data: row, error: insertError } = await supabase
+    .from("transcriptions")
+    .insert({
+      audio_id: audioId,
+      raw_text: transcript.text,
+      source_language: transcript.language,
+      whisper_model: WHISPER_MODEL,
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !row) {
+    return NextResponse.json(
+      {
+        error: `Could not save transcription: ${
+          insertError?.message ?? "unknown"
+        }`,
+      },
+      { status: 500 },
+    );
+  }
+
+  // Record the detected language on the audio artifact (best-effort).
+  if (transcript.language) {
+    await supabase
+      .from("audio_recordings")
+      .update({ language_detected: transcript.language })
+      .eq("id", audioId);
+  }
+
+  await supabase.from("audit_log").insert({
+    actor_role: "doctor",
+    action: "transcribe_recording",
+    entity_type: "transcription",
+    entity_id: row.id,
+    metadata: { audio_id: audioId, source_language: transcript.language },
+  });
+
+  return NextResponse.json({
+    transcriptionId: row.id,
+    text: transcript.text,
+    sourceLanguage: transcript.language,
+    durationMs: Date.now() - started,
+  });
+}

@@ -8,6 +8,7 @@
 import {
   GoogleGenerativeAI,
   SchemaType,
+  type GenerationConfig,
   type ResponseSchema,
 } from "@google/generative-ai";
 
@@ -169,11 +170,19 @@ export async function extractNote(
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
+    // gemini-3-flash-preview enables "thinking" by default. For this strict,
+    // schema-constrained extraction it roughly triples latency (~4s -> ~13s) and
+    // occasionally spikes to minutes, hanging the doctor's "extracting…" screen.
+    // We re-derive D-008 safety flags deterministically server-side (safety.ts),
+    // so the extra reasoning buys little — cap it off for predictable latency.
+    // (thinkingConfig isn't in this SDK's GenerationConfig type yet, but the SDK
+    // forwards it to the REST body; verified ~4s vs ~13s.)
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: RESPONSE_SCHEMA,
       temperature: 0.2,
-    },
+      thinkingConfig: { thinkingBudget: 0 },
+    } as GenerationConfig,
   });
 
   const prompt = buildPrompt(transcript, ctx, nowIso);

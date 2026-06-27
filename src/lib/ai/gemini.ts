@@ -139,9 +139,15 @@ RULES:
 5. Convert relative times ("3 hours later", "every 6 hours") in nurse_tasks.when to absolute ISO timestamps based on Now above, or keep a clear interval like "Q6H".
 6. Default priority "normal". Use "critical" only for life-threatening tasks.
 7. DOSES — transcription is unreliable for numbers, so do NOT "fix" them:
-   - Record the dose EXACTLY as dictated. Keep the spoken unit (if the doctor
-     said "1 gram", write "1 g" — never rewrite it to "1000 mg" or any other
-     number). Never invent, round, or infer a dose that was not spoken.
+   - A medication's dose comes SOLELY from the number the doctor spoke in the
+     transcript. Copy it verbatim and keep the spoken unit (doctor says "1 gram"
+     -> dose "1 g"; never rewrite to "1000 mg" or any other number).
+   - FIREWALL: the numbers in the SAFETY RULES section below are thresholds for
+     the safety check ONLY. NEVER copy a threshold (e.g. "2000mg", "10mg",
+     "200mg") into medications[].dose. If you catch yourself writing a dose that
+     equals a safety-rule number the doctor did not say, you are wrong.
+   - medications[].dose MUST be consistent with how the same drug is described in
+     medical_note.plan — they must not disagree.
    - If a dose is missing, garbled, or clinically implausible, do NOT guess.
      Still list the medication (dose "as charted"), and add a one-line query to
      medical_note.plan, e.g. "VERIFY: Metformin dose unclear in dictation."

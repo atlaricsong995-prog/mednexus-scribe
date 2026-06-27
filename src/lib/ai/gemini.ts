@@ -137,7 +137,13 @@ RULES:
    - No issues -> safety_flags must be an empty array.
 5. Convert relative times ("3 hours later", "every 6 hours") in nurse_tasks.when to absolute ISO timestamps based on Now above, or keep a clear interval like "Q6H".
 6. Default priority "normal". Use "critical" only for life-threatening tasks.
-7. If uncertain about a dose, put the question in medical_note.plan, not in medications.
+7. DOSES — transcription is unreliable for numbers, so do NOT "fix" them:
+   - Record the dose EXACTLY as dictated. Keep the spoken unit (if the doctor
+     said "1 gram", write "1 g" — never rewrite it to "1000 mg" or any other
+     number). Never invent, round, or infer a dose that was not spoken.
+   - If a dose is missing, garbled, or clinically implausible, do NOT guess.
+     Still list the medication (dose "as charted"), and add a one-line query to
+     medical_note.plan, e.g. "VERIFY: Metformin dose unclear in dictation."
 8. Every medication MUST have drug, dose, route, frequency, duration (use "as charted" / "stat" if truly unspecified).
 9. nurse_tasks.conditions is null when there is no condition.
 

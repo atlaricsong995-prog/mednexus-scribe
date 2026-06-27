@@ -29,6 +29,53 @@ function buildPrompt(patientName?: string): string {
   return name ? `Patient: ${name}. ${WHISPER_PROMPT}` : WHISPER_PROMPT;
 }
 
+const MALAY_HONORIFICS = [
+  "encik",
+  "puan",
+  "cik",
+  "tuan",
+  "datuk",
+  "dato",
+  "datin",
+  "haji",
+  "hajjah",
+];
+
+// Common English words Whisper's translations endpoint substitutes for a Malay
+// honorific it can't place (all roughly homophonic with "Encik"/"Cik"/"Tuan").
+const MISHEARD_HONORIFICS = [
+  "inject",
+  "injek",
+  "encheck",
+  "anchik",
+  "ancik",
+  "enzik",
+  "uncle",
+  "tune",
+  "twan",
+];
+
+// Whisper still maps a Malay honorific onto a common English word it sounds like
+// ("Encik" -> "Inject"). Prompt biasing alone didn't always catch it, so repair it
+// deterministically AFTER transcription: we know the patient's real honorific +
+// name from the DB, so only where a KNOWN mis-hearing word directly precedes the
+// patient's own name token do we swap it for the correct honorific. Both anchors
+// (mis-hearing list AND the patient's name token) keep legitimate uses of words
+// like "inject" (e.g. "inject insulin") untouched.
+function fixHonorific(text: string, patientName?: string): string {
+  const tokens = patientName?.trim().split(/\s+/) ?? [];
+  if (tokens.length < 2) return text;
+  const honorific = tokens[0];
+  if (!MALAY_HONORIFICS.includes(honorific.toLowerCase())) return text;
+  const nameTok = tokens[1].replace(/[^A-Za-z]/g, "");
+  if (!nameTok) return text;
+  const re = new RegExp(
+    `\\b(${MISHEARD_HONORIFICS.join("|")})\\s+(${nameTok})\\b`,
+    "gi",
+  );
+  return text.replace(re, (_m, _pre: string, name: string) => `${honorific} ${name}`);
+}
+
 let client: Groq | null = null;
 
 function getClient(): Groq {
@@ -69,5 +116,5 @@ export async function transcribeToEnglish(
   const lang = (result as unknown as { language?: unknown }).language;
   const language = typeof lang === "string" ? lang : null;
 
-  return { text: result.text, language };
+  return { text: fixHonorific(result.text, patientName), language };
 }

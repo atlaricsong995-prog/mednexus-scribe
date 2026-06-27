@@ -39,11 +39,45 @@ const DOT_COLOR: Record<"red" | "amber" | "green", string> = {
 };
 
 function nowLabel(): string {
-  return new Date().toLocaleTimeString("en-GB", {
+  return timeLabel(new Date());
+}
+
+function timeLabel(d: Date | string): string {
+  return new Date(d).toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+// Derive a feed tone/verb from a task's current status — used to BACKFILL the
+// feed from tasks that already existed when the head nurse opened the page (the
+// live channel only delivers events that happen after subscription, so without
+// this the feed sits empty whenever the action happened before they looked).
+function seedEntry(
+  task: Task,
+  patientMap: Map<string, PatientLite>,
+): FeedEntry {
+  const p = patientMap.get(task.patient_id);
+  const bed = p ? ` · Bed ${p.bed_number}` : "";
+  let tone: FeedEntry["tone"] = "dispatch";
+  let verb = "Dispatched";
+  let when = task.created_at;
+  if (task.status === "approved") {
+    tone = "approve";
+    verb = "Doctor approved";
+    when = task.approved_at ?? task.created_at;
+  } else if (task.status === "submitted") {
+    tone = "submit";
+    verb = `Nurse submitted${task.completion_value ? ` (${task.completion_value})` : ""}`;
+    when = task.submitted_at ?? task.created_at;
+  }
+  return {
+    key: `seed-${task.id}`,
+    at: timeLabel(when),
+    message: `${verb}: ${task.description}${bed}`,
+    tone,
+  };
 }
 
 // Control Tower (Tech Spec §5.4) — read-only head-nurse dashboard: ward grid of
@@ -59,7 +93,14 @@ export function ControlTowerBoard({
   patients: PatientLite[];
 }) {
   const patientMap = useMemo(() => buildPatientMap(patients), [patients]);
-  const [feed, setFeed] = useState<FeedEntry[]>([]);
+  // Backfill the feed from tasks already on the board so it isn't blank when the
+  // head nurse opens the page after the action; live events append on top.
+  const [feed, setFeed] = useState<FeedEntry[]>(() =>
+    [...initialTasks]
+      .sort((a, b) => (a.created_at > b.created_at ? -1 : 1))
+      .slice(0, 30)
+      .map((t) => seedEntry(t, patientMap)),
+  );
 
   const pushFeed = (task: Task, tone: FeedEntry["tone"], verb: string) => {
     const p = patientMap.get(task.patient_id);

@@ -14,11 +14,20 @@ import { WHISPER_MODEL } from "@/lib/constants";
 // and in English, since this is the translations endpoint.
 const WHISPER_PROMPT =
   "Malaysian government hospital ward round dictation, code-switched English, Malay and Mandarin Chinese. " +
+  "Malay honorifics (titles before a patient's name, NOT verbs): Encik (Mr), Puan (Mrs), Cik (Ms), Tuan (Sir). " +
   "Medications: Metformin, Amlodipine, Augmentin, Paracetamol, Insulin, Atorvastatin, Omeprazole, Frusemide. " +
   "Clinical terms: blood pressure, blood sugar, capillary blood sugar, oxygen saturation, post-op day, wound, dressing, systolic, diastolic. " +
   "Malay terms: darah tinggi (hypertension), kencing manis (diabetes), demam (fever), sakit dada (chest pain). " +
   "Mandarin terms: 血压 (blood pressure), 血糖 (blood sugar), 发烧 (fever), 胸痛 (chest pain), 胆囊 (gallbladder), 高血压 (hypertension), 糖尿病 (diabetes). " +
   "Units: mmHg, mmol/L. Dosing: BD, TDS, OD, PRN, stat.";
+
+// Whisper biases strongly toward proper nouns it sees in the prompt, so naming the
+// actual patient (e.g. "Encik Lim Ah Kow") stops their honorific+name being heard
+// as a common medical word ("Encik" -> "inject"). Built per-recording.
+function buildPrompt(patientName?: string): string {
+  const name = patientName?.trim();
+  return name ? `Patient: ${name}. ${WHISPER_PROMPT}` : WHISPER_PROMPT;
+}
 
 let client: Groq | null = null;
 
@@ -39,6 +48,7 @@ export interface TranscriptionResult {
 export async function transcribeToEnglish(
   audio: Blob,
   mimeType: string,
+  patientName?: string,
 ): Promise<TranscriptionResult> {
   const ext = mimeType.includes("mp4") || mimeType.includes("m4a")
     ? "m4a"
@@ -49,7 +59,7 @@ export async function transcribeToEnglish(
   const result = await getClient().audio.translations.create({
     file,
     model: WHISPER_MODEL,
-    prompt: WHISPER_PROMPT,
+    prompt: buildPrompt(patientName),
     response_format: "verbose_json",
     temperature: 0,
   });

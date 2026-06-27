@@ -43,13 +43,31 @@ export async function POST(req: Request) {
     );
   }
 
+  // Patient name biases Whisper toward the honorific+name ("Encik Lim Ah Kow")
+  // instead of mishearing it as a common medical word. Best-effort — transcribe
+  // still proceeds without it.
+  let patientName: string | undefined;
+  const { data: audioRow } = await supabase
+    .from("audio_recordings")
+    .select("patient_id")
+    .eq("id", audioId)
+    .maybeSingle();
+  if (audioRow?.patient_id) {
+    const { data: patientRow } = await supabase
+      .from("patients")
+      .select("full_name")
+      .eq("id", audioRow.patient_id)
+      .maybeSingle();
+    patientName = patientRow?.full_name ?? undefined;
+  }
+
   // Whisper translation (retry once, then fail — Tech Spec §3.1).
   let transcript: { text: string; language: string | null };
   try {
-    transcript = await transcribeToEnglish(blob, blob.type || "audio/webm");
+    transcript = await transcribeToEnglish(blob, blob.type || "audio/webm", patientName);
   } catch {
     try {
-      transcript = await transcribeToEnglish(blob, blob.type || "audio/webm");
+      transcript = await transcribeToEnglish(blob, blob.type || "audio/webm", patientName);
     } catch (err) {
       return NextResponse.json(
         {

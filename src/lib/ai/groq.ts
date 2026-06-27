@@ -7,6 +7,19 @@ import Groq, { toFile } from "groq-sdk";
 
 import { WHISPER_MODEL } from "@/lib/constants";
 
+// Domain prompt to bias Whisper toward ward-round vocabulary. Whisper uses this
+// as preceding "context", which nudges spelling/word choice for drug names,
+// clinical phrases, and Malay terms — cutting confusions like blood sugar ->
+// blood pressure. Keep it short (Whisper only honours ~224 tokens of prompt)
+// and in English, since this is the translations endpoint.
+const WHISPER_PROMPT =
+  "Malaysian government hospital ward round dictation, code-switched English, Malay and Mandarin Chinese. " +
+  "Medications: Metformin, Amlodipine, Augmentin, Paracetamol, Insulin, Atorvastatin, Omeprazole, Frusemide. " +
+  "Clinical terms: blood pressure, blood sugar, capillary blood sugar, oxygen saturation, post-op day, wound, dressing, systolic, diastolic. " +
+  "Malay terms: darah tinggi (hypertension), kencing manis (diabetes), demam (fever), sakit dada (chest pain). " +
+  "Mandarin terms: 血压 (blood pressure), 血糖 (blood sugar), 发烧 (fever), 胸痛 (chest pain), 胆囊 (gallbladder), 高血压 (hypertension), 糖尿病 (diabetes). " +
+  "Units: mmHg, mmol/L. Dosing: BD, TDS, OD, PRN, stat.";
+
 let client: Groq | null = null;
 
 function getClient(): Groq {
@@ -36,6 +49,7 @@ export async function transcribeToEnglish(
   const result = await getClient().audio.translations.create({
     file,
     model: WHISPER_MODEL,
+    prompt: WHISPER_PROMPT,
     response_format: "verbose_json",
     temperature: 0,
   });

@@ -1,6 +1,12 @@
 "use client";
 
-import { Clock, BedDouble, CheckCircle2, Hourglass } from "lucide-react";
+import {
+  Clock,
+  BedDouble,
+  CheckCircle2,
+  Hourglass,
+  AlertTriangle,
+} from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { CompletionDialog } from "@/components/completion-dialog";
@@ -43,6 +49,9 @@ export function TaskCard({
       className={cn(
         "border-slate-200",
         task.priority === "critical" && open && "border-red-300 bg-red-50/40",
+        // Drug dispatched under a doctor override of a critical safety flag —
+        // make the whole card read as a hazard for the nurse.
+        task.safety_alert && open && "border-red-400 bg-red-50/60",
       )}
     >
       <CardContent className="space-y-3 p-4">
@@ -81,6 +90,16 @@ export function TaskCard({
             <p className="text-xs text-slate-500">{patient.full_name}</p>
           )}
         </div>
+
+        {task.safety_alert && (
+          <div className="flex items-start gap-1.5 rounded-md border border-red-300 bg-red-100 px-2 py-1.5 text-xs font-medium text-red-800">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              <span className="font-semibold">Allergy / safety override — </span>
+              {task.safety_alert} Confirmed by doctor; verify before giving.
+            </span>
+          </div>
+        )}
 
         {(due || task.conditions) && (
           <div className="space-y-1 text-xs text-slate-500">

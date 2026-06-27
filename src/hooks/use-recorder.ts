@@ -17,6 +17,37 @@ function pickMimeType(): string {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
 }
 
+// Map getUserMedia/MediaRecorder failures to an actionable message instead of
+// a single opaque "Could not start recording." The DOMException name tells us
+// the real cause, which is what you actually need when a demo mic won't start.
+function describeRecorderError(err: unknown): string {
+  const insecure =
+    typeof window !== "undefined" &&
+    !window.isSecureContext &&
+    location.hostname !== "localhost" &&
+    location.hostname !== "127.0.0.1";
+  if (insecure) {
+    return `Microphone blocked: this page must be served over HTTPS (or localhost). Current origin "${location.origin}" is not a secure context.`;
+  }
+  if (err instanceof DOMException) {
+    switch (err.name) {
+      case "NotAllowedError":
+      case "SecurityError":
+        return "Microphone permission denied. Allow mic access in the browser site settings, then try again.";
+      case "NotFoundError":
+      case "OverconstrainedError":
+        return "No microphone found. Plug in or enable an input device and try again.";
+      case "NotReadableError":
+        return "Microphone is busy — another app (Zoom, Meet, etc.) may be using it. Close it and try again.";
+      default:
+        return `Could not start recording (${err.name}: ${err.message}).`;
+    }
+  }
+  return `Could not start recording (${
+    err instanceof Error ? err.message : String(err)
+  }).`;
+}
+
 export interface UseRecorder {
   status: RecorderStatus;
   seconds: number;
@@ -93,11 +124,7 @@ export function useRecorder(): UseRecorder {
       setStatus("recording");
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
     } catch (err) {
-      setError(
-        err instanceof DOMException && err.name === "NotAllowedError"
-          ? "Microphone permission denied."
-          : "Could not start recording.",
-      );
+      setError(describeRecorderError(err));
       stopStream();
     }
   }, [supported]);

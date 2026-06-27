@@ -12,6 +12,7 @@ import {
 } from "@google/generative-ai";
 
 import { GEMINI_MODEL } from "@/lib/constants";
+import { SAFETY_RULES } from "@/lib/safety";
 import { ExtractSchema, type ExtractResult } from "./schemas";
 
 export interface PatientContext {
@@ -103,11 +104,6 @@ const RESPONSE_SCHEMA: ResponseSchema = {
   ],
 };
 
-// MVP safety rule set (Tech Spec §4 / D-008; Phase 2 → full BNF integration).
-const SAFETY_RULES = `Known allergy cross-reactions: penicillin -> amoxicillin, ampicillin, augmentin, co-amoxiclav, flucloxacillin.
-Dose range checks: metformin max 2000mg/day | amlodipine max 10mg/day | metoprolol max 200mg/day.
-Duplicate class: do not combine 2 CCBs (e.g. amlodipine + nifedipine).`;
-
 function buildPrompt(
   transcript: string,
   ctx: PatientContext,
@@ -130,6 +126,10 @@ RULES:
    for identification and the safety check ONLY — never copy it into the note as if it were
    dictated, and never add regular/home medications that were not spoken.
 3. Use Malaysian medical conventions (e.g. "BD" not "BID", "TDS" not "TID").
+   ALL output text MUST be in English only. If the transcript contains Malay or
+   Chinese words, translate them to standard English medical terms (e.g. darah
+   tinggi -> hypertension, kencing manis -> diabetes, 血糖 -> blood sugar,
+   发烧 -> fever). Never leave non-English words in any field.
 4. SAFETY CHECK (D-008): cross-check every medication against patient allergies AND dose ranges below.
    - Allergy conflict -> safety_flags entry {type:"allergy", drug, reason, severity:"critical"}
    - Dose out of range -> {type:"dose", drug, reason, severity:"warning"}

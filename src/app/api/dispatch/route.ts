@@ -16,6 +16,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_DOCTOR_ID } from "@/lib/constants";
+import { checkMedicationSafety } from "@/lib/safety";
 import { ExtractSchema } from "@/lib/ai/schemas";
 import type {
   Medication,
@@ -136,11 +137,44 @@ export async function POST(req: Request) {
     );
   }
 
+  // Patient context — `ward` drives nurse filtering, `allergies` feeds the
+  // safety re-check below. Loaded before the gate so we can re-derive flags.
+  const { data: patient, error: patientErr } = await supabase
+    .from("patients")
+    .select("id, ward, allergies")
+    .eq("id", note.patient_id)
+    .maybeSingle();
+
+  if (patientErr || !patient) {
+    return NextResponse.json({ error: "Patient not found." }, { status: 404 });
+  }
+
   // Merge edits over the stored draft (client may omit unchanged sections).
   const medications = (parsed.data.medications ?? note.medications) as Medication[];
   const nurseTasks = (parsed.data.nurse_tasks ?? note.nurse_tasks) as NurseTask[];
   const medicalNote = parsed.data.medical_note ?? note.medical_note;
-  const safetyFlags = (parsed.data.safety_flags ?? note.safety_flags ?? []) as SafetyFlag[];
+
+  // Re-derive D-008 flags from the FINAL (possibly edited) medication list, not
+  // the stale extract-time flags — removing a drug clears its flag, adding a
+  // dangerous one raises a new flag. We keep any extract-time flag whose drug is
+  // still prescribed and that our deterministic rules didn't already catch (so a
+  // Gemini-only catch isn't lost), but drop flags for removed drugs entirely.
+  const recomputed = checkMedicationSafety(medications, patient.allergies ?? []);
+  const clientFlags = (parsed.data.safety_flags ?? []) as SafetyFlag[];
+  const stillPrescribed = (drug: string) =>
+    medications.some((m) => {
+      const a = m.drug.toLowerCase();
+      const b = drug.toLowerCase();
+      return a.includes(b) || b.includes(a);
+    });
+  const keptClientFlags = clientFlags.filter(
+    (f) =>
+      stillPrescribed(f.drug) &&
+      !recomputed.some(
+        (r) => r.type === f.type && r.drug.toLowerCase() === f.drug.toLowerCase(),
+      ),
+  );
+  const safetyFlags = [...recomputed, ...keptClientFlags];
 
   // D-008 gate — refuse dispatch on an un-acknowledged critical flag.
   const criticalFlags = safetyFlags.filter((f) => f.severity === "critical");
@@ -157,16 +191,11 @@ export async function POST(req: Request) {
     );
   }
 
-  // Patient ward drives nurse filtering on tasks rows.
-  const { data: patient, error: patientErr } = await supabase
-    .from("patients")
-    .select("id, ward")
-    .eq("id", note.patient_id)
-    .maybeSingle();
-
-  if (patientErr || !patient) {
-    return NextResponse.json({ error: "Patient not found." }, { status: 404 });
-  }
+  // Drugs that were dispatched despite a critical flag — surfaced to the nurse
+  // as an allergy/override badge on the medication task (Task #2).
+  const overriddenCriticalDrugs = new Set(
+    criticalFlags.map((f) => f.drug.toLowerCase()),
+  );
 
   const confirmedAt = new Date().toISOString();
 
@@ -191,16 +220,23 @@ export async function POST(req: Request) {
   }
 
   // 3. Build tasks rows — medications + nurse_tasks (Tech Spec §2.1 mapping).
-  const medicationRows = medications.map((m) => ({
-    note_id: noteId,
-    patient_id: note.patient_id,
-    ward: patient.ward,
-    task_type: "medication" as TaskType,
-    description: medicationDescription(m),
-    scheduled_for: null,
-    conditions: null,
-    priority: "normal" as const,
-  }));
+  const medicationRows = medications.map((m) => {
+    const flag = criticalFlags.find(
+      (f) => overriddenCriticalDrugs.has(m.drug.toLowerCase()) && f.drug.toLowerCase() === m.drug.toLowerCase(),
+    );
+    return {
+      note_id: noteId,
+      patient_id: note.patient_id,
+      ward: patient.ward,
+      task_type: "medication" as TaskType,
+      description: medicationDescription(m),
+      scheduled_for: null,
+      conditions: null,
+      // Critical-flagged drug dispatched under doctor override → nurse alert.
+      safety_alert: flag ? flag.reason : null,
+      priority: flag ? ("high" as const) : ("normal" as const),
+    };
+  });
 
   const nurseRows = nurseTasks.map((t) => {
     const { scheduledFor, label } = parseWhen(t.when);
@@ -213,6 +249,7 @@ export async function POST(req: Request) {
       description,
       scheduled_for: scheduledFor,
       conditions: t.conditions ?? null,
+      safety_alert: null as string | null,
       priority: t.priority,
     };
   });

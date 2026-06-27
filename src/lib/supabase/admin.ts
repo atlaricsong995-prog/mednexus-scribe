@@ -17,6 +17,13 @@ export function createAdminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: { persistSession: false, autoRefreshToken: false },
+      // Next.js App Router caches GET fetches in its Data Cache by default,
+      // which froze a stale (empty) ward/task read on the control-tower & boards
+      // (initial server load kept returning 0 tasks even after dispatch). All
+      // reads here are live ward state, so opt every request out of the cache.
+      global: {
+        fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+      },
     },
   );
 }

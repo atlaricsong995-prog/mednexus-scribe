@@ -102,8 +102,11 @@ export function ControlTowerBoard({
     return m;
   }, [tasks]);
 
+  // Outstanding tasks that need head-nurse attention: critical priority OR a
+  // doctor safety override (allergy drug given against a critical flag).
   const criticalActive = tasks.filter(
-    (t) => t.priority === "critical" && isActive(t.status),
+    (t) =>
+      isActive(t.status) && (t.priority === "critical" || !!t.safety_alert),
   );
   const live = status === "subscribed";
 
@@ -115,7 +118,7 @@ export function ControlTowerBoard({
           <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
           <div className="space-y-1">
             <p className="font-semibold text-red-800">
-              {criticalActive.length} critical task
+              {criticalActive.length} critical / override task
               {criticalActive.length === 1 ? "" : "s"} outstanding
             </p>
             <ul className="space-y-0.5 text-sm text-red-700">
@@ -125,6 +128,7 @@ export function ControlTowerBoard({
                   <li key={t.id}>
                     {p ? `Bed ${p.bed_number} · ` : ""}
                     {t.description} — {STATUS_LABEL[t.status]}
+                    {t.safety_alert ? " ⚠ override" : ""}
                   </li>
                 );
               })}

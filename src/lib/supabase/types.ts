@@ -197,6 +197,7 @@ export interface Database {
           description: string;
           scheduled_for: string | null;
           conditions: string | null;
+          safety_alert: string | null;
           priority: TaskPriority;
           status: TaskStatus;
           assigned_to: string | null;
@@ -216,6 +217,7 @@ export interface Database {
           description: string;
           scheduled_for?: string | null;
           conditions?: string | null;
+          safety_alert?: string | null;
           priority?: TaskPriority;
           status?: TaskStatus;
           assigned_to?: string | null;

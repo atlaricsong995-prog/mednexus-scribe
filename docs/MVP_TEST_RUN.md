@@ -7,28 +7,29 @@
 
 ## 🆕 Day 6 更新紀錄（2026-06-27）
 
-> 這天全程實測了一遍完整閉環，修了 2 個真 bug、加了華語支援與用藥安全強化。**有一個必跑的資料庫 migration（見下方 ⚠️）。**
+> **Day 6 = 臨床治理強化 + 精準度/體驗優化。** 全程實測了多輪完整閉環。
+> **狀態：全部完成、已 commit 並 push** —— `origin/main @ 0568620`，共 7 個 Day 6 commit。
+> **migration 003（`tasks.safety_alert`）已套用到 live DB**，不需再手動跑。
 
-**✅ 這天驗證 / 完成的：**
-- **完整閉環實測通過**：錄音 → Whisper → Gemini → 兩個安全旗標 → override 關卡（沒簽不准派發）→ 派發 4 筆 task → realtime 推到 `/nurse` → 護士回報數值 → 醫生 Approve → 閉環關閉，稽核軌跡完整。
-- **華語輸入支援**：用華語錄音實測 → 輸出**統一英文病歷**成立。Whisper 提示詞加了藥名 / 馬來文 / **中文**醫療詞；Gemini 強制全英文輸出。（廣東話/福建話 Whisper 不支援，維持華語。）
+**✅ 安全 / 治理：**
+- **完整閉環實測通過**：錄音 → Whisper → Gemini → 安全旗標 → override 關卡（沒簽不准派發）→ 派發 task → realtime 推到 `/nurse` → 護士回報數值 → 醫生 Approve → 閉環關閉，稽核軌跡完整。
+- **編輯後安全重算（D-008 強化）**：安全檢查改成在**確認當下依編輯後藥單重算**（新檔 `src/lib/safety.ts`，6 個測試案例通過）。移除危險藥 → 旗標自動消失（不再假警報）；新增危險藥 → 補旗標（不再漏報，最危險的那種）。
+- **護士端過敏徽章（新功能）**：醫生 override 過敏藥派發後，該藥的護士任務卡顯示**紅色「Allergy / safety override」徽章 + 紅框**，升為 high 優先級；指揮塔 banner 也列出。
 
-**🐛 修好的 2 個 bug：**
-1. **指揮塔 `/control-tower` 永遠顯示「0 active tasks」** —— Next.js fetch 快取把空結果凍住了。已讓 `admin.ts` 所有查詢 `no-store`。
-2. **安全檢查只在萃取時跑一次，醫生編輯藥單後不重算** —— 造成「移除危險藥仍被擋（假警報）」和「新增危險藥不跳旗標（漏報，最危險）」。已改成在**確認當下依編輯後藥單重算**（新檔 `src/lib/safety.ts`，6 個測試案例通過）。
+**✅ 多語：**
+- **華語輸入支援**：華語錄音 → 輸出**統一英文病歷**成立。Whisper 提示詞加藥名 / 馬來文 / **中文**醫療詞；Gemini 強制全英文輸出。（廣東話/福建話 Whisper 不支援，維持華語。）
 
-**🔴→🟢 護士端過敏徽章（新功能）：** 醫生 override 過敏藥派發後，該藥的護士任務卡會顯示**紅色「Allergy / safety override」徽章 + 紅框**，並升為 high 優先級；指揮塔 banner 也會列出。
+**✅ 精準度 / 體驗優化（第二輪，全部實測驗證）：**
+- **`extracting…` 卡住修正**：`gemini-3-flash-preview` 預設開 thinking，萃取偶爾暴衝到 **170–215 秒**、卡死畫面。關閉 `thinkingBudget` → 約 **4 秒**、穩定（安全旗標 server 端會重算，不靠 Gemini 推理）。
+- **「Encik」被聽成「Inject」修正**：Whisper prompt 偏置不夠力，加了**轉錄後確定性修正**——只在已知誤聽詞直接接病人姓名 token 時，換回病人正確敬稱（雙錨點，`inject insulin` 等正常用法不誤傷）。實測現在讀「Encik Lim」。
+- **劑量數字修正**：Gemini 曾把安全規則裡的「max 2000mg」門檻誤當劑量。加**防火牆規則**：劑量只准取自逐字稿、嚴禁挪用門檻數字。實測錄音現在正確顯示 **Metformin「1g」、Augmentin「625mg」**。
+- **指揮塔 Live feed 空白修正**：feed 原本只記「訂閱後」事件，整輪跑完才開控制塔就一片空白。改成用既有 task **回填**，打開即見近期活動（realtime 送達本身正常，已無頭驗證）。
 
-**🎙️ 麥克風錯誤訊息：** 「could not recording」改成精準訊息（找不到麥克風 / 被佔用 / 權限 / 非 HTTPS 分別提示）。
+**🐛 早先修好的：**
+- 指揮塔「0 active tasks」：Next fetch 快取凍住空結果 → `admin.ts` 全查詢 `no-store`。
+- 麥克風錯誤訊息：「could not recording」改成精準提示（找不到麥克風 / 被佔用 / 權限 / 非 HTTPS）。
 
-**⚠️ 必跑一步（否則派發會報錯）：**
-到 **Supabase Dashboard → SQL Editor** 貼上並 Run（冪等，可重跑）：
-```sql
-alter table public.tasks
-  add column if not exists safety_alert text;
-```
-
-**⏳ 還沒做：** 以上改動（~9 個檔 + migration 003）**都還沒 git commit**；Whisper 對數字仍會聽錯（158→32/128），靠醫生審閱修正。
+**⏳ 已知限制：** Whisper 對**數字**仍非 100%（曾 158→32、1g→2000）。靠三層緩解：醫生審閱 + Gemini 劑量防火牆 + 不確定時 `VERIFY:` 提示；但仍建議人眼確認劑量。
 
 ---
 
@@ -221,7 +222,7 @@ alter table public.tasks
 ---
 
 ## 已知小現象（不是 bug）
-- **Realtime 冷啟動**：剛打開 `/nurse` 或 `/control-tower` 後 ~1 秒內的第一個事件偶爾會漏。對策：那兩頁**先開著等暖機**，或漏了就重新整理（server 端初始資料會補齊狀態）。
+- **Realtime 冷啟動**：剛打開 `/nurse` 或 `/control-tower` 後 ~1 秒內的第一個 *live* 事件偶爾會漏。對策：那兩頁**先開著等暖機**，或漏了就重新整理（server 端初始資料會補齊狀態）。指揮塔 Live feed 現在會**回填既有 task**，所以就算流程跑完才打開也看得到近期活動，不再一片空白。
 - 同一台電腦的多個分頁共用同一個 realtime 連線，行為正常；要更像「多裝置」可用無痕視窗或不同瀏覽器。
 - 重複操作會累積很多 approved 任務，畫面會變長 —— demo 前想清空可跟我說，我給你一段清資料的 SQL（保留 audit_log）。
 

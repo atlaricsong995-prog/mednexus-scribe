@@ -61,16 +61,23 @@ function nameTokens(fullName: string): string[] {
     .filter((t) => t.length >= 3 && !TITLE_TOKENS.has(t));
 }
 
-// Numbers explicitly spoken in the transcript (numerals + number-words), used to
-// match bed numbers. Returns a Set of integers.
-function spokenNumbers(t: string): Set<number> {
-  const nums = new Set<number>();
-  for (const m of Array.from(t.matchAll(/\b(\d{1,3})\b/g)))
-    nums.add(parseInt(m[1], 10));
+// Bed numbers spoken in the transcript. CRITICAL: only a number that directly
+// follows "bed"/"katil" counts — a ward dictation is full of unrelated numbers
+// ("for 5 days", "fifteen hundred mg", "1 gram") and bed numbers here are 12–17,
+// so matching any bare number would constantly collide with doses/durations and
+// scramble the check. Anchoring to the keyword keeps it precise.
+function spokenBeds(t: string): Set<number> {
+  const beds = new Set<number>();
+  // "bed 12", "bed no 12", "bed number 12", "bed #12", "katil 12"
+  for (const m of Array.from(
+    t.matchAll(/\b(?:bed|katil)\s*(?:no\.?|number|#)?\s*(\d{1,3})\b/g),
+  ))
+    beds.add(parseInt(m[1], 10));
+  // "bed twelve"
   for (const [word, n] of Object.entries(NUMBER_WORDS)) {
-    if (new RegExp(`\\b${word}\\b`).test(t)) nums.add(n);
+    if (new RegExp(`\\b(?:bed|katil)\\s+${word}\\b`).test(t)) beds.add(n);
   }
-  return nums;
+  return beds;
 }
 
 // Trailing digits of an MRN spoken as "MRN 3" / "MRN003" / "M-R-N 003".
@@ -91,12 +98,12 @@ interface Scored {
 //   bed number  → 3 (strong, distinctive)
 //   MRN         → 3 (strong)
 //   name token  → 2 each (moderate; tolerant of mis-transcription)
-function scorePatient(t: string, nums: Set<number>, p: RosterPatient): Scored {
+function scorePatient(t: string, beds: Set<number>, p: RosterPatient): Scored {
   let score = 0;
   const basis: string[] = [];
 
   const bed = parseInt(p.bed_number.replace(/\D/g, ""), 10);
-  if (!Number.isNaN(bed) && nums.has(bed)) {
+  if (!Number.isNaN(bed) && beds.has(bed)) {
     score += 3;
     basis.push(`bed ${p.bed_number}`);
   }
@@ -119,14 +126,14 @@ export function crossCheckPatient(
   roster: RosterPatient[],
 ): PatientCheck {
   const t = norm(transcript);
-  const nums = spokenNumbers(t);
+  const beds = spokenBeds(t);
 
-  const openScore = scorePatient(t, nums, open);
+  const openScore = scorePatient(t, beds, open);
   // Best-scoring OTHER patient on the ward.
   let bestOther: Scored | null = null;
   for (const p of roster) {
     if (p.id === open.id) continue;
-    const s = scorePatient(t, nums, p);
+    const s = scorePatient(t, beds, p);
     if (s.score > 0 && (!bestOther || s.score > bestOther.score)) bestOther = s;
   }
 

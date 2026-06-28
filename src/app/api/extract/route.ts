@@ -10,6 +10,10 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractNote } from "@/lib/ai/gemini";
 import { DEMO_DOCTOR_ID } from "@/lib/constants";
+import {
+  crossCheckPatient,
+  type RosterPatient,
+} from "@/lib/clinical/patient-match";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +47,7 @@ export async function POST(req: Request) {
       .maybeSingle(),
     supabase
       .from("patients")
-      .select("id, full_name, age, diagnosis, allergies")
+      .select("id, full_name, age, diagnosis, allergies, bed_number, mrn, ward")
       .eq("id", patientId)
       .maybeSingle(),
   ]);
@@ -76,6 +80,30 @@ export async function POST(req: Request) {
       },
       { status: 500 },
     );
+  }
+
+  // Right-patient cross-check (soft, advisory) — does the dictation name a
+  // DIFFERENT patient than the open chart? Match the transcript against the closed
+  // ward roster (bounded → robust to accents). Best-effort; never blocks.
+  let patientCheck = null;
+  try {
+    const { data: roster } = await supabase
+      .from("patients")
+      .select("id, full_name, bed_number, mrn")
+      .eq("ward", patient.ward)
+      .eq("active", true);
+    patientCheck = crossCheckPatient(
+      transcription.raw_text,
+      {
+        id: patient.id,
+        full_name: patient.full_name,
+        bed_number: patient.bed_number,
+        mrn: patient.mrn,
+      },
+      (roster as RosterPatient[]) ?? [],
+    );
+  } catch {
+    // identity check is non-critical — proceed without it.
   }
 
   const { data: note, error: insertError } = await supabase
@@ -112,6 +140,8 @@ export async function POST(req: Request) {
       transcription_id: transcriptionId,
       patient_id: patientId,
       safety_flag_count: extracted.safety_flags.length,
+      patient_check: patientCheck?.status ?? null,
+      patient_check_basis: patientCheck?.basis ?? null,
     },
   });
 
@@ -125,5 +155,7 @@ export async function POST(req: Request) {
     // Carried to the review panel so it can re-derive inline safety flags live
     // as the doctor edits the medication list (D-008).
     allergies: patient.allergies ?? [],
+    // Soft right-patient advisory (Enh Day 2) — surfaced as a banner, not a block.
+    patient_check: patientCheck,
   });
 }

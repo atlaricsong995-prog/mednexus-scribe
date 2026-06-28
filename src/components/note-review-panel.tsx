@@ -9,6 +9,8 @@ import {
   ShieldCheck,
   Plus,
   Trash2,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 
 import {
@@ -35,6 +37,13 @@ import type {
   SafetyFlag,
 } from "@/lib/supabase/types";
 
+export interface PatientCheck {
+  status: "match" | "mismatch" | "unverified";
+  openLabel: string;
+  spokenLabel?: string;
+  basis?: string;
+}
+
 export interface NoteReviewData {
   noteId: string;
   medical_note: MedicalNote;
@@ -45,6 +54,8 @@ export interface NoteReviewData {
   // Patient allergies — lets the panel re-derive D-008 flags live as the doctor
   // edits the medication list (add Augmentin → red box appears on that row).
   allergies: string[];
+  // Soft right-patient advisory (Enh Day 2). Null when unavailable.
+  patient_check?: PatientCheck | null;
 }
 
 const NOTE_FIELDS: { key: keyof MedicalNote; label: string }[] = [
@@ -166,8 +177,36 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
   const criticalFlags = flags.filter((f) => f.severity === "critical");
   const warningFlags = flags.filter((f) => f.severity === "warning");
 
+  const check = data.patient_check;
+
   return (
     <div className="space-y-4">
+      {/* Right-patient advisory (Enh Day 2) — soft, non-blocking */}
+      {check && check.status === "mismatch" && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm">
+          <UserX className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="text-amber-800">
+            <p className="font-semibold">Right-patient check — please verify</p>
+            <p className="mt-0.5">
+              You have <span className="font-medium">{check.openLabel}</span>{" "}
+              open, but the dictation sounds like{" "}
+              <span className="font-medium">{check.spokenLabel}</span>
+              {check.basis ? ` (heard ${check.basis})` : ""}. Confirm this is the
+              correct patient before dispatching.
+            </p>
+          </div>
+        </div>
+      )}
+      {check && check.status === "match" && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          <UserCheck className="h-4 w-4 shrink-0" />
+          <span>
+            Patient confirmed from dictation — {check.openLabel}
+            {check.basis ? ` (${check.basis})` : ""}.
+          </span>
+        </div>
+      )}
+
       {/* Card 1 — Clinical note */}
       <Card className="border-slate-200">
         <CardHeader className="pb-3">

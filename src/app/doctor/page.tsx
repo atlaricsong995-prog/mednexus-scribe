@@ -3,6 +3,7 @@ import { Stethoscope } from "lucide-react";
 
 import { PatientCard } from "@/components/patient-card";
 import { ApprovalsPanel } from "@/components/approvals-panel";
+import { BreakGlassListener } from "@/components/break-glass-listener";
 import { createClient } from "@/lib/supabase/server";
 import { getWardData } from "@/lib/server/ward-data";
 import { WARD } from "@/lib/constants";
@@ -47,6 +48,8 @@ export default async function DoctorPage() {
           ← Switch role
         </Link>
       </header>
+
+      <BreakGlassListener patients={patientLites} />
 
       <ApprovalsPanel
         ward={WARD}

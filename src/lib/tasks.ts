@@ -38,6 +38,12 @@ export function isActive(status: TaskStatus): boolean {
   return status === "pending" || status === "in_progress" || status === "submitted";
 }
 
+// Routine-timetable cell (Enh Day 3) — lives only in the patient-window grid, so
+// the ad-hoc boards (nurse / control tower / approvals) filter these out.
+export function isRoutine(task: Task): boolean {
+  return task.routine_key != null;
+}
+
 export function isOpenForNurse(status: TaskStatus): boolean {
   return status === "pending" || status === "in_progress";
 }

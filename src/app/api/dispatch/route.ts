@@ -219,6 +219,18 @@ export async function POST(req: Request) {
     );
   }
 
+  // 2b. Append-only medical record (Enh Day 3, plan point 5) — the patient's
+  // previously-confirmed note becomes the history; this newly-confirmed one is the
+  // current record. We never overwrite: prior versions stay readable in the
+  // timeline. Archiving AFTER the new note is confirmed keeps exactly one 'confirmed'
+  // (current) note per patient.
+  await supabase
+    .from("clinical_notes")
+    .update({ status: "archived" })
+    .eq("patient_id", note.patient_id)
+    .eq("status", "confirmed")
+    .neq("id", noteId);
+
   // 3. Build tasks rows — medications + nurse_tasks (Tech Spec §2.1 mapping).
   const medicationRows = medications.map((m) => {
     const flag = criticalFlags.find(

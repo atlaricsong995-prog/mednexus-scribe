@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
 
 import {
@@ -34,9 +34,16 @@ const textareaCls =
 export function CompletionDialog({
   task,
   patient,
+  trigger,
+  onCompleted,
 }: {
   task: Task;
   patient?: PatientLite;
+  // Custom dialog trigger (e.g. a timetable grid cell). Falls back to the default
+  // "Mark complete" button when omitted.
+  trigger?: ReactNode;
+  // Called after a successful submit — the timetable grid uses it to refresh.
+  onCompleted?: () => void;
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -73,14 +80,17 @@ export function CompletionDialog({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not submit.");
       toast({
-        title: abnormal ? "⚠ Abnormal value submitted" : "Task submitted",
-        description: "Sent to the doctor for approval.",
+        title: abnormal ? "⚠ Abnormal value recorded" : "Value recorded",
+        description: task.routine_key
+          ? "Charted to the routine timetable."
+          : "Sent to the doctor for approval.",
       });
       setOpen(false);
       setValue("");
       setSys("");
       setDia("");
       setNotes("");
+      onCompleted?.();
     } catch (err) {
       toast({
         variant: "destructive",
@@ -95,10 +105,12 @@ export function CompletionDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="w-full">
-          <CheckCircle2 className="h-4 w-4" />
-          Mark complete
-        </Button>
+        {trigger ?? (
+          <Button size="sm" className="w-full">
+            <CheckCircle2 className="h-4 w-4" />
+            Mark complete
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

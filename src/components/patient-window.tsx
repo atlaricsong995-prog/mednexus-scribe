@@ -22,9 +22,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MedicalRecordBody } from "@/components/medical-record-body";
+import { RecordHistory } from "@/components/record-history";
 import { LockedRecord } from "@/components/locked-record";
+import { RoutineTimetable } from "@/components/routine-timetable";
+import { EscalateButton } from "@/components/escalate-button";
+import { ProposeOrderPanel } from "@/components/propose-order-panel";
 import { canViewRecord } from "@/lib/server/role";
-import type { ClinicalNote, Patient, Role } from "@/lib/supabase/types";
+import type {
+  ClinicalNote,
+  NurseTask,
+  Patient,
+  Role,
+  Task,
+} from "@/lib/supabase/types";
 
 const ROLE_LABEL: Record<string, string> = {
   nurse: "a nurse",
@@ -37,22 +47,30 @@ export function PatientWindow({
   patient,
   role,
   note,
+  history = [],
+  watchFor = [],
+  routineTasks = [],
 }: {
   patient: Patient;
   role: Role | null;
   note: ClinicalNote | null;
+  // Archived versions for the record timeline (doctor view / break-glass only).
+  history?: ClinicalNote[];
+  // Conditional / high-priority "watch-for" orders — operational, shown to all
+  // roles even when the record narrative is masked (computed server-side).
+  watchFor?: NurseTask[];
+  // Today's routine vitals cells for the timetable grid.
+  routineTasks?: Task[];
 }) {
   const allergies = patient.allergies ?? [];
   const showRecord = canViewRecord(role);
-
-  // Special instructions = conditional / high-priority "watch-for" orders from
-  // the current record. Display-only (escalation button wired in Day 4). Visible
-  // to all roles — nurses need these even when the full record is masked.
-  const watchFor =
-    note?.nurse_tasks.filter(
-      (t) =>
-        t.conditions || t.priority === "high" || t.priority === "critical",
-    ) ?? [];
+  const canEscalate =
+    role === "nurse" || role === "mo" || role === "head_nurse";
+  const patientLite = {
+    id: patient.id,
+    full_name: patient.full_name,
+    bed_number: patient.bed_number,
+  };
 
   return (
     <div className="space-y-4">
@@ -129,7 +147,10 @@ export function PatientWindow({
         </CardHeader>
         <CardContent>
           {showRecord ? (
-            <MedicalRecordBody note={note} />
+            <div className="space-y-4">
+              <MedicalRecordBody note={note} />
+              <RecordHistory notes={history} />
+            </div>
           ) : (
             <LockedRecord
               patientId={patient.id}
@@ -139,7 +160,7 @@ export function PatientWindow({
         </CardContent>
       </Card>
 
-      {/* Section 2 — Routine timetable (placeholder until Day 3) */}
+      {/* Section 2 — Routine timetable (Enh Day 3) */}
       <Card className="border-slate-200">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -147,22 +168,31 @@ export function PatientWindow({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
-            Today&apos;s routine vitals (q4h) appear here as a fillable grid.
-          </p>
+          <RoutineTimetable patient={patientLite} routineTasks={routineTasks} />
         </CardContent>
       </Card>
 
-      {/* Section 3 — Special instructions (display-only) */}
+      {/* MO-only — propose an order to the attending (Enh Day 4) */}
+      {role === "mo" && <ProposeOrderPanel patientId={patient.id} />}
+
+      {/* Section 3 — Special instructions (display-only + escalate) */}
       <Card className="border-slate-200">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ClipboardList className="h-4 w-4 text-slate-500" /> Special
-            instructions
-            <span className="text-sm font-normal text-slate-400">
-              ({watchFor.length})
-            </span>
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ClipboardList className="h-4 w-4 text-slate-500" /> Special
+              instructions
+              <span className="text-sm font-normal text-slate-400">
+                ({watchFor.length})
+              </span>
+            </CardTitle>
+            {canEscalate && (
+              <EscalateButton
+                patientId={patient.id}
+                bedNumber={patient.bed_number}
+              />
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-2">
           {watchFor.length === 0 ? (

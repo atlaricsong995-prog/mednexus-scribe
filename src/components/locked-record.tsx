@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MedicalRecordBody } from "@/components/medical-record-body";
+import { RecordHistory } from "@/components/record-history";
 import { breakGlassViewRecord } from "@/app/patient/actions";
 import { useToast } from "@/hooks/use-toast";
 import type { ClinicalNote } from "@/lib/supabase/types";
@@ -35,6 +36,7 @@ export function LockedRecord({
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [note, setNote] = useState<ClinicalNote | null>(null);
+  const [history, setHistory] = useState<ClinicalNote[]>([]);
   const [unlocked, setUnlocked] = useState(false);
 
   async function confirm() {
@@ -44,6 +46,7 @@ export function LockedRecord({
       const res = await breakGlassViewRecord(patientId, reason);
       if (!res.ok) throw new Error(res.error ?? "Break-glass failed.");
       setNote(res.note ?? null);
+      setHistory(res.history ?? []);
       setUnlocked(true);
       setOpen(false);
       toast({
@@ -73,6 +76,7 @@ export function LockedRecord({
           </span>
         </div>
         <MedicalRecordBody note={note} />
+        <RecordHistory notes={history} />
       </div>
     );
   }

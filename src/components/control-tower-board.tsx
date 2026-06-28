@@ -17,6 +17,7 @@ import {
   bedStatusColor,
   buildPatientMap,
   isActive,
+  isRoutine,
   STATUS_LABEL,
   type PatientLite,
 } from "@/lib/tasks";
@@ -122,10 +123,15 @@ export function ControlTowerBoard({
     );
   };
 
-  const { tasks, status } = useRealtimeTasks(ward, {
+  const { tasks: allTasks, status } = useRealtimeTasks(ward, {
     initialTasks,
-    onInsert: (task) => pushFeed(task, "dispatch", "Dispatched"),
+    // Routine timetable cells ride the same channel — exclude them from the feed.
+    onInsert: (task) => {
+      if (isRoutine(task)) return;
+      pushFeed(task, "dispatch", "Dispatched");
+    },
     onUpdate: (task) => {
+      if (isRoutine(task)) return;
       if (task.status === "submitted")
         pushFeed(
           task,
@@ -137,6 +143,8 @@ export function ControlTowerBoard({
       else if (task.status === "approved") pushFeed(task, "approve", "Doctor approved");
     },
   });
+
+  const tasks = useMemo(() => allTasks.filter((t) => !isRoutine(t)), [allTasks]);
 
   const tasksByPatient = useMemo(() => {
     const m = new Map<string, Task[]>();

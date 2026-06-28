@@ -24,7 +24,15 @@ function medLine(m: Medication): string {
   return s || m.drug;
 }
 
-export function MedicalRecordBody({ note }: { note: ClinicalNote | null }) {
+export function MedicalRecordBody({
+  note,
+  variant = "current",
+}: {
+  note: ClinicalNote | null;
+  // "archived" entries (rendered inside RecordHistory) omit the surgical-report
+  // action so the history timeline stays compact.
+  variant?: "current" | "archived";
+}) {
   if (!note) {
     return (
       <p className="text-sm text-slate-500">
@@ -95,7 +103,9 @@ export function MedicalRecordBody({ note }: { note: ClinicalNote | null }) {
         </div>
       )}
 
-      <SurgicalReportButton patientNote={note.medical_note.assessment} />
+      {variant === "current" && (
+        <SurgicalReportButton patientNote={note.medical_note.assessment} />
+      )}
     </div>
   );
 }

@@ -3,9 +3,10 @@ import { Stethoscope } from "lucide-react";
 
 import { PatientCard } from "@/components/patient-card";
 import { ApprovalsPanel } from "@/components/approvals-panel";
-import { BreakGlassListener } from "@/components/break-glass-listener";
+import { DoctorAlerts } from "@/components/doctor-alerts";
 import { createClient } from "@/lib/supabase/server";
 import { getWardData } from "@/lib/server/ward-data";
+import { getRecentAlerts } from "@/lib/server/alerts-data";
 import { WARD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +20,12 @@ export default async function DoctorPage() {
     .eq("active", true)
     .order("bed_number");
 
-  // Live approvals feed (submitted nurse tasks) — see ApprovalsPanel.
-  const { patients: patientLites, tasks } = await getWardData(WARD);
+  // Live approvals feed (submitted nurse tasks + MO proposals) — see ApprovalsPanel.
+  // Plus the break-glass / escalation alert inbox backfill (DoctorAlerts).
+  const [{ patients: patientLites, tasks }, initialAlerts] = await Promise.all([
+    getWardData(WARD),
+    getRecentAlerts(),
+  ]);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-8">
@@ -49,7 +54,7 @@ export default async function DoctorPage() {
         </Link>
       </header>
 
-      <BreakGlassListener patients={patientLites} />
+      <DoctorAlerts patients={patientLites} initialAlerts={initialAlerts} />
 
       <ApprovalsPanel
         ward={WARD}

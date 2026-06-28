@@ -193,12 +193,17 @@ export interface Database {
       tasks: {
         Row: {
           id: string;
-          note_id: string;
+          // Null for routine-timetable cells and MO proposals (no parent note).
+          note_id: string | null;
           patient_id: string;
           ward: string;
           task_type: TaskType;
           description: string;
           obs_type: string | null;
+          // Non-null marks a materialised routine-timetable cell (e.g. 'vitals:bp').
+          routine_key: string | null;
+          // A resident's proposed order awaiting attending approval (Enh Day 4).
+          proposed_by_mo: boolean;
           scheduled_for: string | null;
           conditions: string | null;
           safety_alert: string | null;
@@ -215,12 +220,14 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          note_id: string;
+          note_id?: string | null;
           patient_id: string;
           ward: string;
           task_type: TaskType;
           description: string;
           obs_type?: string | null;
+          routine_key?: string | null;
+          proposed_by_mo?: boolean;
           scheduled_for?: string | null;
           conditions?: string | null;
           safety_alert?: string | null;

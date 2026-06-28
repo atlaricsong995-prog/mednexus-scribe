@@ -7,7 +7,13 @@ import { getRole } from "@/lib/server/role";
 import {
   getPatientByBed,
   getLatestConfirmedNote,
+  getRecordHistory,
 } from "@/lib/server/patient-window-data";
+import {
+  ensureTodayRoutine,
+  getTodayRoutineTasks,
+} from "@/lib/server/routine";
+import type { NurseTask } from "@/lib/supabase/types";
 import { WARD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -31,9 +37,28 @@ export default async function PatientWindowPage({
   );
   if (!patient) notFound();
 
-  // RBAC: only serialise the record body when the role may see it. Non-doctors
-  // get null here and must break-glass (audited) to load it.
-  const note = role === "doctor" ? await getLatestConfirmedNote(patient.id) : null;
+  // Materialise today's routine vitals for this patient (idempotent), then load
+  // them for the timetable grid. Visible to every role.
+  await ensureTodayRoutine(patient.id, patient.ward);
+
+  // The current confirmed note: needed unmasked for the doctor's record body +
+  // history, and (for all roles) to derive the operational "watch-for" list. The
+  // record body / history are only passed through when the role may see them; the
+  // watch-for tasks are operational and shown to everyone.
+  const [currentNote, routineTasks] = await Promise.all([
+    getLatestConfirmedNote(patient.id),
+    getTodayRoutineTasks(patient.id),
+  ]);
+
+  const showRecord = role === "doctor";
+  const note = showRecord ? currentNote : null;
+  const history = showRecord ? await getRecordHistory(patient.id) : [];
+
+  const watchFor: NurseTask[] =
+    currentNote?.nurse_tasks.filter(
+      (t) => t.conditions || t.priority === "high" || t.priority === "critical",
+    ) ?? [];
+
   const back = BACK[role ?? ""] ?? { href: "/", label: "Home" };
 
   return (
@@ -46,7 +71,14 @@ export default async function PatientWindowPage({
         {back.label}
       </Link>
 
-      <PatientWindow patient={patient} role={role} note={note} />
+      <PatientWindow
+        patient={patient}
+        role={role}
+        note={note}
+        history={history}
+        watchFor={watchFor}
+        routineTasks={routineTasks}
+      />
     </main>
   );
 }

@@ -18,8 +18,9 @@ export async function getPatientByBed(
   return (data as Patient) ?? null;
 }
 
-// The current medical record = the most recent CONFIRMED clinical note.
-// (Day 3 turns this into an append-only timeline; for now it's the latest.)
+// The current medical record = the single CONFIRMED clinical note. Dispatch keeps
+// the timeline append-only: confirming a new note archives the prior one, so there
+// is exactly one 'confirmed' (current) note per patient (Enh Day 3).
 export async function getLatestConfirmedNote(
   patientId: string,
 ): Promise<ClinicalNote | null> {
@@ -33,4 +34,19 @@ export async function getLatestConfirmedNote(
     .limit(1)
     .maybeSingle();
   return (data as ClinicalNote) ?? null;
+}
+
+// Archived (superseded) notes, newest first — the read-only history shown under the
+// current record (Enh Day 3, plan point 5).
+export async function getRecordHistory(
+  patientId: string,
+): Promise<ClinicalNote[]> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("clinical_notes")
+    .select("*")
+    .eq("patient_id", patientId)
+    .eq("status", "archived")
+    .order("confirmed_at", { ascending: false });
+  return (data as ClinicalNote[]) ?? [];
 }

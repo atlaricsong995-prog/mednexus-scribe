@@ -186,6 +186,52 @@ export function isObsType(value: string | null | undefined): value is ObsType {
   return !!value && value in OBSERVATION_CATALOG;
 }
 
+// --- Routine timetable (Enh Day 3) ---------------------------------------
+//
+// The default standing order materialised for every patient: a small vitals set
+// observed q4h. "Today only" — six slots at 00/04/08/12/16/20 (user decision: no
+// scheduler, no future days). These drive the fillable grid in the patient window.
+
+export const ROUTINE_SLOT_HOURS = [0, 4, 8, 12, 16, 20] as const;
+
+// Vitals charted q4h. Rows of the timetable grid (glucose is dictated per-patient,
+// not part of the standing routine — keeps the test for the one-off abnormal value).
+export const DEFAULT_ROUTINE: ObsType[] = ["bp", "hr", "temp", "spo2"];
+
+export const ROUTINE_PREFIX = "vitals";
+
+export function routineKey(obs: ObsType): string {
+  return `${ROUTINE_PREFIX}:${obs}`;
+}
+
+export function routineObsFromKey(
+  key: string | null | undefined,
+): ObsType | null {
+  if (!key || !key.startsWith(`${ROUTINE_PREFIX}:`)) return null;
+  const obs = key.slice(ROUTINE_PREFIX.length + 1);
+  return isObsType(obs) ? obs : null;
+}
+
+export interface RoutineSlot {
+  hour: number;
+  iso: string; // today at this hour (local), as an ISO timestamp
+  label: string; // "08:00"
+}
+
+// Today's q4h slots as ISO timestamps anchored to the local day. Re-deriving on a
+// later call the same day yields the same hours, so materialisation stays idempotent.
+export function todayRoutineSlots(now: Date = new Date()): RoutineSlot[] {
+  return ROUTINE_SLOT_HOURS.map((hour) => {
+    const d = new Date(now);
+    d.setHours(hour, 0, 0, 0);
+    return {
+      hour,
+      iso: d.toISOString(),
+      label: `${String(hour).padStart(2, "0")}:00`,
+    };
+  });
+}
+
 // Determine whether a recorded observation value is outside its normal range.
 // Accepts the raw completion string ("200/120", "6.2 mmol/L") and tolerates
 // trailing units. Returns false for unknown types / unparseable values (we don't

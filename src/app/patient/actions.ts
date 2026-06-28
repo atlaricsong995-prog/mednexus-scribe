@@ -7,13 +7,17 @@
 // notification to the attending doctor off this same audit row.
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRole } from "@/lib/server/role";
-import { getLatestConfirmedNote } from "@/lib/server/patient-window-data";
+import {
+  getLatestConfirmedNote,
+  getRecordHistory,
+} from "@/lib/server/patient-window-data";
 import type { ClinicalNote } from "@/lib/supabase/types";
 
 export interface BreakGlassResult {
   ok: boolean;
   error?: string;
   note?: ClinicalNote | null;
+  history?: ClinicalNote[];
 }
 
 export async function breakGlassViewRecord(
@@ -41,6 +45,49 @@ export async function breakGlassViewRecord(
     metadata: { reason: trimmed, patient_id: patientId, role: role ?? "unknown" },
   });
 
-  const note = await getLatestConfirmedNote(patientId);
-  return { ok: true, note };
+  const [note, history] = await Promise.all([
+    getLatestConfirmedNote(patientId),
+    getRecordHistory(patientId),
+  ]);
+  return { ok: true, note, history };
+}
+
+// Escalate to the attending (Enh Day 4, plan point 4). A nurse or resident raises
+// the patient to the attending's attention; the alert rides the audit_log realtime
+// channel (migration 005) to the doctor's /doctor inbox. One tap — no order is
+// created, this is a notification. The append-only audit row is the governance trail.
+export interface EscalateResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function escalateToAttending(
+  patientId: string,
+  message?: string,
+): Promise<EscalateResult> {
+  const role = getRole();
+  if (!patientId) {
+    return { ok: false, error: "Missing patient." };
+  }
+  if (role !== "nurse" && role !== "mo" && role !== "head_nurse") {
+    return { ok: false, error: "Only ward staff may escalate." };
+  }
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("audit_log").insert({
+    actor_role: role,
+    action: "escalation",
+    entity_type: "patient",
+    entity_id: patientId,
+    metadata: {
+      patient_id: patientId,
+      role,
+      message: message?.trim() || "Requesting attending review.",
+    },
+  });
+
+  if (error) {
+    return { ok: false, error: `Could not escalate: ${error.message}` };
+  }
+  return { ok: true };
 }

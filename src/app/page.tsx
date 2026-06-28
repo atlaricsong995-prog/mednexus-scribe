@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Stethoscope, Syringe, LayoutDashboard } from "lucide-react";
+import { Stethoscope, Syringe, LayoutDashboard, UserCog } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import {
 import type { Role } from "@/lib/supabase/types";
 
 type RoleOption = {
-  role: Extract<Role, "doctor" | "nurse" | "head_nurse">;
+  role: Extract<Role, "doctor" | "nurse" | "head_nurse" | "mo">;
   label: string;
   who: string;
   blurb: string;
@@ -29,6 +29,14 @@ const ROLES: RoleOption[] = [
     blurb: "Ward round, dictate notes, confirm orders.",
     route: "/doctor",
     icon: Stethoscope,
+  },
+  {
+    role: "mo",
+    label: "Medical Officer",
+    who: "駐院醫生",
+    blurb: "Read timetable, propose orders, escalate to attending.",
+    route: "/mo",
+    icon: UserCog,
   },
   {
     role: "nurse",
@@ -80,11 +88,11 @@ export default function LandingPage() {
         </p>
       </div>
 
-      <section className="w-full max-w-3xl">
+      <section className="w-full max-w-5xl">
         <p className="mb-4 text-center text-sm font-medium text-slate-500">
           I am a…
         </p>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {ROLES.map(({ role, label, who, blurb, route, icon: Icon }) => (
             <Card
               key={role}

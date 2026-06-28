@@ -27,7 +27,7 @@ export async function PATCH(
 
   const { data: task, error: fetchErr } = await supabase
     .from("tasks")
-    .select("id, status, obs_type")
+    .select("id, status, obs_type, routine_key")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -46,16 +46,21 @@ export async function PATCH(
   // — don't trust a client-sent flag). Abnormal vitals render red on the boards.
   const abnormal = isAbnormal(task.obs_type, value);
 
-  const submittedAt = new Date().toISOString();
+  // Routine timetable cells (Enh Day 3) are charted vitals, not orders that need a
+  // doctor's sign-off — record them straight to 'approved' so they never clutter
+  // the attending's approval queue. Ad-hoc nurse tasks still go via 'submitted'.
+  const isRoutine = !!task.routine_key;
+  const now = new Date().toISOString();
   const { data: updated, error: updateErr } = await supabase
     .from("tasks")
     .update({
-      status: "submitted",
+      status: isRoutine ? "approved" : "submitted",
       completion_value: value,
       completion_notes: body.notes?.trim() || null,
       abnormal,
       completed_by: DEMO_NURSE_ID,
-      submitted_at: submittedAt,
+      submitted_at: now,
+      approved_at: isRoutine ? now : null,
     })
     .eq("id", taskId)
     .select("*")

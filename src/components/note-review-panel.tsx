@@ -11,7 +11,11 @@ import {
   Trash2,
   UserCheck,
   UserX,
+  ArrowRightLeft,
+  Loader2,
 } from "lucide-react";
+
+import { useToast } from "@/hooks/use-toast";
 
 import {
   Card,
@@ -41,6 +45,7 @@ export interface PatientCheck {
   status: "match" | "mismatch" | "unverified";
   openLabel: string;
   spokenLabel?: string;
+  spokenPatientId?: string;
   basis?: string;
 }
 
@@ -132,9 +137,50 @@ function flagMatchesMed(flag: SafetyFlag, med: Medication): boolean {
 // button dispatches via /api/dispatch, gated by the override when a critical flag
 // is present.
 export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
+  const { toast } = useToast();
   const [note, setNote] = useState<MedicalNote>(data.medical_note);
   const [meds, setMeds] = useState<Medication[]>(data.medications);
   const [tasks, setTasks] = useState<NurseTask[]>(data.nurse_tasks);
+  // Allergies + right-patient check are stateful so the actionable banner can
+  // re-target the note to the correct patient and re-derive safety flags live.
+  const [allergies, setAllergies] = useState<string[]>(data.allergies ?? []);
+  const [check, setCheck] = useState<PatientCheck | null>(
+    data.patient_check ?? null,
+  );
+  const [retargeting, setRetargeting] = useState(false);
+  const [movedTo, setMovedTo] = useState<string | null>(null);
+
+  async function retarget() {
+    if (!check?.spokenPatientId) return;
+    setRetargeting(true);
+    try {
+      const res = await fetch("/api/notes/retarget", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          noteId: data.noteId,
+          patientId: check.spokenPatientId,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Could not move note.");
+      setAllergies(d.allergies ?? []);
+      setMovedTo(check.spokenLabel ?? d.label ?? "the correct patient");
+      setCheck(null);
+      toast({
+        title: "Note moved",
+        description: `Re-targeted to ${d.label ?? "the correct patient"}; safety re-checked.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Could not move note",
+        description: err instanceof Error ? err.message : "Unknown error.",
+      });
+    } finally {
+      setRetargeting(false);
+    }
+  }
 
   const updateMed = (i: number, key: keyof Medication, value: string) =>
     setMeds((prev) =>
@@ -171,29 +217,59 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
   // Live D-008 re-derivation. Same deterministic checker the server runs on
   // dispatch, so the inline frames the doctor sees match what gates dispatch.
   const flags = useMemo(
-    () => checkMedicationSafety(meds, data.allergies),
-    [meds, data.allergies],
+    () => checkMedicationSafety(meds, allergies),
+    [meds, allergies],
   );
   const criticalFlags = flags.filter((f) => f.severity === "critical");
   const warningFlags = flags.filter((f) => f.severity === "warning");
 
-  const check = data.patient_check;
-
   return (
     <div className="space-y-4">
-      {/* Right-patient advisory (Enh Day 2) — soft, non-blocking */}
+      {/* Right-patient advisory (Enh Day 2) — soft, non-blocking, actionable */}
+      {movedTo && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          <UserCheck className="h-4 w-4 shrink-0" />
+          <span>Note moved to {movedTo} — safety re-checked for this patient.</span>
+        </div>
+      )}
       {check && check.status === "mismatch" && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm">
-          <UserX className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div className="text-amber-800">
-            <p className="font-semibold">Right-patient check — please verify</p>
-            <p className="mt-0.5">
-              You have <span className="font-medium">{check.openLabel}</span>{" "}
-              open, but the dictation sounds like{" "}
-              <span className="font-medium">{check.spokenLabel}</span>
-              {check.basis ? ` (heard ${check.basis})` : ""}. Confirm this is the
-              correct patient before dispatching.
-            </p>
+        <div className="space-y-2 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm">
+          <div className="flex items-start gap-2">
+            <UserX className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="text-amber-800">
+              <p className="font-semibold">Right-patient check — please verify</p>
+              <p className="mt-0.5">
+                You have <span className="font-medium">{check.openLabel}</span>{" "}
+                open, but the dictation sounds like{" "}
+                <span className="font-medium">{check.spokenLabel}</span>
+                {check.basis ? ` (heard ${check.basis})` : ""}.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pl-6">
+            {check.spokenPatientId && (
+              <Button
+                size="sm"
+                onClick={retarget}
+                disabled={retargeting}
+                className="bg-amber-600 hover:bg-amber-700"
+              >
+                {retargeting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRightLeft className="h-4 w-4" />
+                )}
+                Move note to {check.spokenLabel?.split(" · ")[0]}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCheck(null)}
+              disabled={retargeting}
+            >
+              Dismiss — correct patient
+            </Button>
           </div>
         </div>
       )}

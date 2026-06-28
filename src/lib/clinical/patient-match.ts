@@ -27,6 +27,7 @@ export interface PatientCheck {
   status: "match" | "mismatch" | "unverified";
   openLabel: string;
   spokenLabel?: string; // populated on mismatch — who the dictation sounds like
+  spokenPatientId?: string; // id of that patient, so the note can be re-targeted
   basis?: string; // what matched, e.g. "bed 14" / "name \"Raj\"" — for the banner
 }
 
@@ -135,6 +136,7 @@ export function crossCheckPatient(
       status: "mismatch",
       openLabel: label(open),
       spokenLabel: label(bestOther.patient),
+      spokenPatientId: bestOther.patient.id,
       basis: bestOther.basis,
     };
   }

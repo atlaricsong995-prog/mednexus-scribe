@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_NURSE_ID } from "@/lib/constants";
+import { isAbnormal } from "@/lib/clinical/vocab";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function PATCH(
 
   const { data: task, error: fetchErr } = await supabase
     .from("tasks")
-    .select("id, status")
+    .select("id, status, obs_type")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -40,13 +41,19 @@ export async function PATCH(
     );
   }
 
+  const value = body.value?.trim() || null;
+  // Range-check observation values against OBSERVATION_CATALOG (server-authoritative
+  // — don't trust a client-sent flag). Abnormal vitals render red on the boards.
+  const abnormal = isAbnormal(task.obs_type, value);
+
   const submittedAt = new Date().toISOString();
   const { data: updated, error: updateErr } = await supabase
     .from("tasks")
     .update({
       status: "submitted",
-      completion_value: body.value?.trim() || null,
+      completion_value: value,
       completion_notes: body.notes?.trim() || null,
+      abnormal,
       completed_by: DEMO_NURSE_ID,
       submitted_at: submittedAt,
     })
@@ -72,6 +79,8 @@ export async function PATCH(
       ward: updated.ward,
       completion_value: updated.completion_value,
       completion_notes: updated.completion_notes,
+      obs_type: updated.obs_type,
+      abnormal: updated.abnormal,
     },
   });
 

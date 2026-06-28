@@ -42,11 +42,16 @@ export function isOpenForNurse(status: TaskStatus): boolean {
   return status === "pending" || status === "in_progress";
 }
 
-// Ward-grid bed colour: red if a critical task is still open, amber if any task
-// is active, green when nothing is outstanding.
+// Ward-grid bed colour: red if an active task is critical / a safety override /
+// an abnormal vital, amber if any task is active, green when nothing outstanding.
 export function bedStatusColor(tasks: Task[]): "red" | "amber" | "green" {
   const active = tasks.filter((t) => isActive(t.status));
-  if (active.some((t) => t.priority === "critical")) return "red";
+  if (
+    active.some(
+      (t) => t.priority === "critical" || !!t.safety_alert || t.abnormal,
+    )
+  )
+    return "red";
   if (active.length > 0) return "amber";
   return "green";
 }

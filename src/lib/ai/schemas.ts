@@ -20,6 +20,12 @@ export const NurseTaskSchema = z.object({
   when: z.string(),
   conditions: z.string().nullable(),
   priority: z.enum(["low", "normal", "high", "critical"]),
+  // For observation/vital tasks, the controlled type from OBSERVATION_CATALOG
+  // (bp/glucose/temp/spo2/hr/rr) so the nurse gets a fixed-unit input and the
+  // value can be range-checked. null for non-observation tasks.
+  obs_type: z
+    .enum(["bp", "glucose", "temp", "spo2", "hr", "rr"])
+    .nullable(),
 });
 
 export const MedicalNoteSchema = z.object({

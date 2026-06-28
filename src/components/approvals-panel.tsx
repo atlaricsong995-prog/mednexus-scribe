@@ -6,6 +6,7 @@ import { BellRing, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRealtimeTasks } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/supabase/types";
 import { buildPatientMap, type PatientLite } from "@/lib/tasks";
 
@@ -32,7 +33,10 @@ export function ApprovalsPanel({
       if (task.status === "submitted" && prev.status !== "submitted") {
         const p = patientMap.get(task.patient_id);
         toast({
-          title: "Task ready for approval",
+          variant: task.abnormal ? "destructive" : undefined,
+          title: task.abnormal
+            ? "⚠ Abnormal value ready for approval"
+            : "Task ready for approval",
           description: `${p ? `Bed ${p.bed_number} · ` : ""}${task.description}${
             task.completion_value ? ` — ${task.completion_value}` : ""
           }`,
@@ -77,7 +81,10 @@ export function ApprovalsPanel({
           return (
             <div
               key={t.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white p-3"
+              className={cn(
+                "flex items-center justify-between gap-3 rounded-lg border bg-white p-3",
+                t.abnormal ? "border-red-300" : "border-amber-200",
+              )}
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-slate-900">
@@ -85,7 +92,19 @@ export function ApprovalsPanel({
                 </p>
                 <p className="text-xs text-slate-500">
                   {p ? `Bed ${p.bed_number} · ${p.full_name}` : "—"}
-                  {t.completion_value ? ` · ${t.completion_value}` : ""}
+                  {t.completion_value ? (
+                    <span
+                      className={cn(
+                        t.abnormal && "font-semibold text-red-600",
+                      )}
+                    >
+                      {" · "}
+                      {t.completion_value}
+                      {t.abnormal ? " ⚠ abnormal" : ""}
+                    </span>
+                  ) : (
+                    ""
+                  )}
                   {t.completion_notes ? ` · ${t.completion_notes}` : ""}
                 </p>
               </div>

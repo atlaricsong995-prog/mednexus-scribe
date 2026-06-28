@@ -230,6 +230,7 @@ export async function POST(req: Request) {
       ward: patient.ward,
       task_type: "medication" as TaskType,
       description: medicationDescription(m),
+      obs_type: null as string | null,
       scheduled_for: null,
       conditions: null,
       // Critical-flagged drug dispatched under doctor override → nurse alert.
@@ -247,6 +248,9 @@ export async function POST(req: Request) {
       ward: patient.ward,
       task_type: classifyTask(t.task),
       description,
+      // Controlled observation type → nurse gets a fixed-unit input and the
+      // recorded value is range-checked for the abnormal-vital highlight.
+      obs_type: t.obs_type ?? null,
       scheduled_for: scheduledFor,
       conditions: t.conditions ?? null,
       safety_alert: null as string | null,

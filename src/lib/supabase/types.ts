@@ -32,6 +32,9 @@ export interface NurseTask {
   when: string;
   conditions: string | null;
   priority: "low" | "normal" | "high" | "critical";
+  // Controlled observation type (OBSERVATION_CATALOG key) for vital-sign tasks;
+  // null for everything else. Drives fixed-unit nurse input + abnormal check.
+  obs_type: "bp" | "glucose" | "temp" | "spo2" | "hr" | "rr" | null;
 }
 
 // D-008 medication safety flag, persisted on clinical_notes.safety_flags (Day 4).
@@ -195,9 +198,11 @@ export interface Database {
           ward: string;
           task_type: TaskType;
           description: string;
+          obs_type: string | null;
           scheduled_for: string | null;
           conditions: string | null;
           safety_alert: string | null;
+          abnormal: boolean;
           priority: TaskPriority;
           status: TaskStatus;
           assigned_to: string | null;
@@ -215,9 +220,11 @@ export interface Database {
           ward: string;
           task_type: TaskType;
           description: string;
+          obs_type?: string | null;
           scheduled_for?: string | null;
           conditions?: string | null;
           safety_alert?: string | null;
+          abnormal?: boolean;
           priority?: TaskPriority;
           status?: TaskStatus;
           assigned_to?: string | null;

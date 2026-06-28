@@ -1,4 +1,4 @@
-// Deterministic clinical safety check (D-008) — server-only, NO LLM.
+// Deterministic clinical safety check (D-008) — NO LLM.
 //
 // Gemini produces safety_flags at extraction time, but the doctor can edit the
 // medication list before confirming. This module re-derives the flags from the
@@ -6,7 +6,12 @@
 // what is actually being prescribed (removing a drug clears its flag; adding a
 // dangerous drug raises a new one). The rule set mirrors SAFETY_RULES below,
 // which is the single source of truth shared with the Gemini prompt.
+//
+// Dose/frequency are read through the structured vocab helpers (lib/clinical/
+// vocab) rather than ad-hoc regex, so the math matches the controlled units the
+// prescribing UI now produces. Pure — safe to run client-side for live flags.
 import type { Medication, SafetyFlag } from "@/lib/supabase/types";
+import { doseToMg, freqPerDay } from "@/lib/clinical/vocab";
 
 // Allergy label -> drug names that conflict with it (cross-reactivity).
 const ALLERGY_CROSS: Record<string, string[]> = {
@@ -34,25 +39,6 @@ const DRUG_CLASS: Record<string, string> = {
   nifedipine: "CCB",
 };
 
-// Frequency token -> doses per day.
-const FREQ_PER_DAY: Record<string, number> = {
-  od: 1,
-  daily: 1,
-  om: 1,
-  on: 1,
-  stat: 1,
-  bd: 2,
-  bid: 2,
-  q12h: 2,
-  tds: 3,
-  tid: 3,
-  q8h: 3,
-  qds: 4,
-  qid: 4,
-  q6h: 4,
-  q4h: 6,
-};
-
 // Human-readable rule text injected into the Gemini prompt — keeps the LLM and
 // this deterministic checker describing the SAME rules.
 export const SAFETY_RULES = `Known allergy cross-reactions: penicillin -> amoxicillin, ampicillin, augmentin, co-amoxiclav, flucloxacillin.
@@ -61,29 +47,6 @@ Duplicate class: do not combine 2 CCBs (e.g. amlodipine + nifedipine).`;
 
 function norm(s: string): string {
   return (s ?? "").toLowerCase().trim();
-}
-
-// Parse a free-text dose ("1g", "1000mg", "1.2 g", "500mcg") to milligrams.
-function doseToMg(dose: string): number | null {
-  const m = norm(dose).match(/([\d.]+)\s*(mcg|mg|g)?/);
-  if (!m) return null;
-  const val = parseFloat(m[1]);
-  if (Number.isNaN(val)) return null;
-  const unit = m[2] ?? "mg";
-  if (unit === "g") return val * 1000;
-  if (unit === "mcg") return val / 1000;
-  return val;
-}
-
-// Parse a frequency ("TDS", "1g three times a day" already normalised by Gemini
-// to "TDS"/"Q6H") to doses per day. Returns null for PRN/unknown (skip ceiling).
-function freqPerDay(frequency: string): number | null {
-  const f = norm(frequency).replace(/[\s.]/g, "");
-  if (!f || f.includes("prn")) return null;
-  for (const [token, n] of Object.entries(FREQ_PER_DAY)) {
-    if (f === token || f.includes(token)) return n;
-  }
-  return null;
 }
 
 // Match an allergy/class table key against a drug name, both directions.

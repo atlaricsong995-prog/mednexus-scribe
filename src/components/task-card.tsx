@@ -52,6 +52,9 @@ export function TaskCard({
         // Drug dispatched under a doctor override of a critical safety flag —
         // make the whole card read as a hazard for the nurse.
         task.safety_alert && open && "border-red-400 bg-red-50/60",
+        // Recorded observation outside its normal range (Enh Day 1) — keep it red
+        // even after submission so the abnormal value stays visible to the team.
+        task.abnormal && "border-red-400 bg-red-50/60",
       )}
     >
       <CardContent className="space-y-3 p-4">
@@ -97,6 +100,16 @@ export function TaskCard({
             <span>
               <span className="font-semibold">Allergy / safety override — </span>
               {task.safety_alert} Confirmed by doctor; verify before giving.
+            </span>
+          </div>
+        )}
+
+        {task.abnormal && task.completion_value && (
+          <div className="flex items-start gap-1.5 rounded-md border border-red-300 bg-red-100 px-2 py-1.5 text-xs font-medium text-red-800">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              <span className="font-semibold">Abnormal — </span>
+              {task.completion_value} is outside the normal range.
             </span>
           </div>
         )}

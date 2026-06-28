@@ -14,6 +14,7 @@ import {
 
 import { GEMINI_MODEL } from "@/lib/constants";
 import { SAFETY_RULES } from "@/lib/safety";
+import { ROUTE_OPTIONS, FREQ_OPTIONS, DOSE_UNITS } from "@/lib/clinical/vocab";
 import { ExtractSchema, type ExtractResult } from "./schemas";
 
 export interface PatientContext {
@@ -66,8 +67,14 @@ const RESPONSE_SCHEMA: ResponseSchema = {
             format: "enum",
             enum: ["low", "normal", "high", "critical"],
           },
+          obs_type: {
+            type: SchemaType.STRING,
+            format: "enum",
+            nullable: true,
+            enum: ["bp", "glucose", "temp", "spo2", "hr", "rr"],
+          },
         },
-        required: ["task", "when", "conditions", "priority"],
+        required: ["task", "when", "conditions", "priority", "obs_type"],
       },
     },
     icd10_suggestions: {
@@ -152,7 +159,15 @@ RULES:
      Still list the medication (dose "as charted"), and add a one-line query to
      medical_note.plan, e.g. "VERIFY: Metformin dose unclear in dictation."
 8. Every medication MUST have drug, dose, route, frequency, duration (use "as charted" / "stat" if truly unspecified).
-9. nurse_tasks.conditions is null when there is no condition.
+9. CONTROLLED UNITS — normalise to these tokens (the prescribing UI uses fixed dropdowns):
+   - route MUST be one of: ${ROUTE_OPTIONS.join(", ")} (e.g. "by mouth"/"oral" -> "PO", "drip"/"intravenous" -> "IV"). If genuinely unclear, use "PO".
+   - frequency MUST be one of: ${FREQ_OPTIONS.join(", ")} (e.g. "twice a day" -> "BD", "every 6 hours" -> "Q6H", "once only"/"immediately" -> "STAT", "when required" -> "PRN").
+   - dose MUST be "<number> <unit>" where unit is one of: ${DOSE_UNITS.join(", ")} (keep the number the doctor spoke; see rule 7).
+10. nurse_tasks.conditions is null when there is no condition.
+11. obs_type — for nurse_tasks that record a routine vital sign / measurement, set obs_type to the matching catalog key:
+    bp (blood pressure), glucose (blood sugar / BSL / capillary glucose), temp (temperature),
+    spo2 (oxygen saturation / SpO₂ / sats), hr (heart rate / pulse), rr (respiratory rate).
+    For any task that is NOT one of these measurements (medications to give, procedures, generic monitoring), obs_type MUST be null.
 
 SAFETY RULES:
 ${SAFETY_RULES}

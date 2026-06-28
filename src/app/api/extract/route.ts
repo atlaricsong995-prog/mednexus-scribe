@@ -122,5 +122,8 @@ export async function POST(req: Request) {
     nurse_tasks: extracted.nurse_tasks,
     icd10_suggestions: extracted.icd10_suggestions,
     safety_flags: extracted.safety_flags,
+    // Carried to the review panel so it can re-derive inline safety flags live
+    // as the doctor edits the medication list (D-008).
+    allergies: patient.allergies ?? [],
   });
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
 
 import {
   Dialog,
@@ -15,15 +15,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import {
+  OBSERVATION_CATALOG,
+  isAbnormal,
+  isObsType,
+} from "@/lib/clinical/vocab";
 import type { Task } from "@/lib/supabase/types";
 import type { PatientLite } from "@/lib/tasks";
 
 const textareaCls =
   "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
-// CompletionDialog (Task 5.2) — nurse records a completion value (e.g. "BSL 6.2
-// mmol/L") + optional notes, then submits the task for doctor approval via PATCH
-// /api/tasks/[id]/complete. The board updates itself from the realtime UPDATE.
+// CompletionDialog (Task 5.2) — nurse records a completion value, then submits
+// the task for doctor approval via PATCH /api/tasks/[id]/complete. For observation
+// tasks (task.obs_type set) the inputs are fixed-unit fields from
+// OBSERVATION_CATALOG and the value is range-checked live so an out-of-range vital
+// (e.g. BP 200/120) shows a red warning before submit and red on the board after.
 export function CompletionDialog({
   task,
   patient,
@@ -34,8 +41,26 @@ export function CompletionDialog({
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
+  const [sys, setSys] = useState("");
+  const [dia, setDia] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const obs = isObsType(task.obs_type) ? task.obs_type : null;
+  const spec = obs ? OBSERVATION_CATALOG[obs] : null;
+
+  // Compose the canonical completion string (with fixed unit) from the inputs.
+  const composedValue = useMemo(() => {
+    if (!spec) return value.trim();
+    if (spec.kind === "bp") {
+      if (!sys.trim() && !dia.trim()) return "";
+      return `${sys.trim() || "?"}/${dia.trim() || "?"} ${spec.unit}`;
+    }
+    return value.trim() ? `${value.trim()} ${spec.unit}` : "";
+  }, [spec, value, sys, dia]);
+
+  const abnormal = obs ? isAbnormal(obs, composedValue) : false;
+  const canSubmit = spec ? composedValue !== "" : true;
 
   async function submit() {
     setSubmitting(true);
@@ -43,16 +68,18 @@ export function CompletionDialog({
       const res = await fetch(`/api/tasks/${task.id}/complete`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value, notes }),
+        body: JSON.stringify({ value: composedValue, notes }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not submit.");
       toast({
-        title: "Task submitted",
+        title: abnormal ? "⚠ Abnormal value submitted" : "Task submitted",
         description: "Sent to the doctor for approval.",
       });
       setOpen(false);
       setValue("");
+      setSys("");
+      setDia("");
       setNotes("");
     } catch (err) {
       toast({
@@ -83,17 +110,69 @@ export function CompletionDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div>
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
-              Result / value
-            </p>
-            <Input
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="e.g. BSL 6.2 mmol/L, BP 128/82, done"
-              autoFocus
-            />
-          </div>
+          {spec ? (
+            <div>
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                {spec.label} ({spec.unit})
+              </p>
+              {spec.kind === "bp" ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={sys}
+                    onChange={(e) => setSys(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="Systolic"
+                    autoFocus
+                  />
+                  <span className="text-slate-400">/</span>
+                  <Input
+                    value={dia}
+                    onChange={(e) => setDia(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="Diastolic"
+                  />
+                  <span className="shrink-0 text-sm text-slate-500">
+                    {spec.unit}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    inputMode="decimal"
+                    step={spec.step}
+                    placeholder={spec.placeholder}
+                    autoFocus
+                  />
+                  <span className="shrink-0 text-sm text-slate-500">
+                    {spec.unit}
+                  </span>
+                </div>
+              )}
+              {abnormal && (
+                <p className="mt-1.5 flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1.5 text-xs font-medium text-red-700">
+                  <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+                  Outside normal range
+                  {spec.kind === "bp"
+                    ? ` (${spec.systolic[0]}–${spec.systolic[1]} / ${spec.diastolic[0]}–${spec.diastolic[1]} ${spec.unit})`
+                    : ` (${spec.normal[0]}–${spec.normal[1]} ${spec.unit})`}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                Result / value
+              </p>
+              <Input
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="e.g. done, sample sent"
+                autoFocus
+              />
+            </div>
+          )}
           <div>
             <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
               Notes (optional)
@@ -121,7 +200,7 @@ export function CompletionDialog({
           >
             Cancel
           </Button>
-          <Button onClick={submit} disabled={submitting}>
+          <Button onClick={submit} disabled={submitting || !canSubmit}>
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (

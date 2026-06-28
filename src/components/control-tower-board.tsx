@@ -69,7 +69,9 @@ function seedEntry(
     when = task.approved_at ?? task.created_at;
   } else if (task.status === "submitted") {
     tone = "submit";
-    verb = `Nurse submitted${task.completion_value ? ` (${task.completion_value})` : ""}`;
+    verb = `Nurse submitted${task.completion_value ? ` (${task.completion_value})` : ""}${
+      task.abnormal ? " ⚠ ABNORMAL" : ""
+    }`;
     when = task.submitted_at ?? task.created_at;
   }
   return {
@@ -127,7 +129,9 @@ export function ControlTowerBoard({
         pushFeed(
           task,
           "submit",
-          `Nurse submitted${task.completion_value ? ` (${task.completion_value})` : ""}`,
+          `Nurse submitted${task.completion_value ? ` (${task.completion_value})` : ""}${
+            task.abnormal ? " ⚠ ABNORMAL" : ""
+          }`,
         );
       else if (task.status === "approved") pushFeed(task, "approve", "Doctor approved");
     },
@@ -143,11 +147,13 @@ export function ControlTowerBoard({
     return m;
   }, [tasks]);
 
-  // Outstanding tasks that need head-nurse attention: critical priority OR a
-  // doctor safety override (allergy drug given against a critical flag).
+  // Outstanding tasks that need head-nurse attention: critical priority, a
+  // doctor safety override (allergy drug given against a critical flag), or an
+  // abnormal recorded vital (Enh Day 1).
   const criticalActive = tasks.filter(
     (t) =>
-      isActive(t.status) && (t.priority === "critical" || !!t.safety_alert),
+      isActive(t.status) &&
+      (t.priority === "critical" || !!t.safety_alert || t.abnormal),
   );
   const live = status === "subscribed";
 
@@ -170,6 +176,9 @@ export function ControlTowerBoard({
                     {p ? `Bed ${p.bed_number} · ` : ""}
                     {t.description} — {STATUS_LABEL[t.status]}
                     {t.safety_alert ? " ⚠ override" : ""}
+                    {t.abnormal
+                      ? ` ⚠ abnormal${t.completion_value ? ` (${t.completion_value})` : ""}`
+                      : ""}
                   </li>
                 );
               })}

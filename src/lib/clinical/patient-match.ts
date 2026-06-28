@@ -102,7 +102,13 @@ function scorePatient(t: string, beds: Set<number>, p: RosterPatient): Scored {
   let score = 0;
   const basis: string[] = [];
 
-  const bed = parseInt(p.bed_number.replace(/\D/g, ""), 10);
+  // Bed is a SECONDARY hint only — it's a location (changes on transfer) and a
+  // real bed code is compound (e.g. "B2-5A-13B"). We match the bed's trailing
+  // LOCAL number (the part anyone would actually say: "bed 13"), so compound
+  // formats work and we never collapse "5A-13B" into a bogus "513". MRN + name
+  // are the reliable identifiers and carry the check.
+  const localBed = p.bed_number.match(/(\d+)\D*$/);
+  const bed = localBed ? parseInt(localBed[1], 10) : NaN;
   if (!Number.isNaN(bed) && beds.has(bed)) {
     score += 3;
     basis.push(`bed ${p.bed_number}`);

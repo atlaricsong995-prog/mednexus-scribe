@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, FolderOpen } from "lucide-react";
 
 import { PatientSummary } from "@/components/patient-summary";
 import { Recorder } from "@/components/recorder";
@@ -38,6 +38,17 @@ export default async function PatientDetailPage({
 
       <div className="space-y-6">
         <PatientSummary patient={patient} />
+
+        <Link
+          href={`/patient/${encodeURIComponent(patient.bed_number)}`}
+          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 transition-colors hover:border-slate-900"
+        >
+          <span className="flex items-center gap-2">
+            <FolderOpen className="h-4 w-4" />
+            Open full patient window (record · timetable · instructions)
+          </span>
+          <span className="text-slate-400">→</span>
+        </Link>
 
         <section>
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">

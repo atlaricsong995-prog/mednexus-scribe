@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Clock,
   BedDouble,
@@ -78,10 +79,13 @@ export function TaskCard({
             </span>
           </div>
           {patient && (
-            <span className="flex shrink-0 items-center gap-1 text-xs text-slate-500">
+            <Link
+              href={`/patient/${encodeURIComponent(patient.bed_number)}`}
+              className="flex shrink-0 items-center gap-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
+            >
               <BedDouble className="h-3.5 w-3.5" />
               Bed {patient.bed_number}
-            </span>
+            </Link>
           )}
         </div>
 

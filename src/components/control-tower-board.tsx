@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   TriangleAlert,
   RadioTower,
@@ -199,10 +200,11 @@ export function ControlTowerBoard({
               const activeCount = ptasks.filter((t) => isActive(t.status)).length;
               const color = bedStatusColor(ptasks);
               return (
-                <div
+                <Link
                   key={p.id}
+                  href={`/patient/${encodeURIComponent(p.bed_number)}`}
                   className={cn(
-                    "rounded-xl border p-3 transition-colors",
+                    "block rounded-xl border p-3 transition-all hover:shadow-md hover:ring-1 hover:ring-slate-300",
                     BED_COLOR[color],
                   )}
                 >
@@ -218,7 +220,7 @@ export function ControlTowerBoard({
                   <p className="mt-2 text-xs font-medium text-slate-500">
                     {activeCount} active task{activeCount === 1 ? "" : "s"}
                   </p>
-                </div>
+                </Link>
               );
             })}
           </div>

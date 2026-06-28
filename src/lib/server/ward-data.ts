@@ -9,7 +9,10 @@ export async function getWardData(
   ward: string,
 ): Promise<{ patients: PatientLite[]; tasks: Task[] }> {
   const supabase = createAdminClient();
-  const [{ data: patients }, { data: tasks }] = await Promise.all([
+  const [
+    { data: patients, error: patientsErr },
+    { data: tasks, error: tasksErr },
+  ] = await Promise.all([
     supabase
       .from("patients")
       .select("id, full_name, bed_number")
@@ -25,6 +28,16 @@ export async function getWardData(
       .eq("ward", ward)
       .order("created_at", { ascending: false }),
   ]);
+
+  // Don't swallow a query failure into an empty board — that once looked like data
+  // loss when a migration (006: tasks.routine_key) hadn't been applied yet. Log it
+  // loudly so a missing column / RLS issue is diagnosable, not silent.
+  if (patientsErr) {
+    console.error(`[ward-data] patients query failed: ${patientsErr.message}`);
+  }
+  if (tasksErr) {
+    console.error(`[ward-data] tasks query failed: ${tasksErr.message}`);
+  }
 
   return { patients: (patients as PatientLite[]) ?? [], tasks: tasks ?? [] };
 }

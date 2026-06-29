@@ -29,7 +29,7 @@ import { LockedRecord } from "@/components/locked-record";
 import { MedicationTimetable } from "@/components/medication-timetable";
 import { RoutineTimetable } from "@/components/routine-timetable";
 import { TaskCard } from "@/components/task-card";
-import { isActive } from "@/lib/tasks";
+import { isActive, isUnauthorisedProposal } from "@/lib/tasks";
 import { EscalateButton } from "@/components/escalate-button";
 import { ProposeOrderPanel } from "@/components/propose-order-panel";
 import { canViewRecord } from "@/lib/server/role";
@@ -79,10 +79,12 @@ export function PatientWindow({
   const canEscalate =
     role === "nurse" || role === "mo" || role === "head_nurse";
   const canChart = role === "nurse";
-  // Outstanding ad-hoc tasks: hide MO proposals still awaiting the attending; show
-  // active ones first, then recently closed. The nurse can complete; others view.
+  // Outstanding ad-hoc tasks: hide MO proposals still awaiting the attending's
+  // authorisation (not yet a live order); show active ones first, then recently
+  // closed. Once authorised + nurse-completed the task is no longer an unauthorised
+  // proposal, so it stays visible here. The nurse can complete; others view.
   const tasks = [...adHocTasks]
-    .filter((t) => !(t.proposed_by_mo && t.status === "submitted"))
+    .filter((t) => !(isUnauthorisedProposal(t) && t.status === "submitted"))
     .sort((a, b) => {
       const aa = isActive(a.status) ? 0 : 1;
       const bb = isActive(b.status) ? 0 : 1;

@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_DOCTOR_ID } from "@/lib/constants";
+import { isUnauthorisedProposal } from "@/lib/tasks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function PATCH(
 
   const { data: task, error: fetchErr } = await supabase
     .from("tasks")
-    .select("id, status, proposed_by_mo, completion_value")
+    .select("id, status, proposed_by_mo, completion_value, completed_by")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -34,11 +35,15 @@ export async function PATCH(
   }
 
   // Two kinds of 'submitted' task approve in opposite directions:
-  //   - a nurse COMPLETION (has a value) → approving CLOSES it ('approved').
-  //   - an MO PROPOSAL (proposed_by_mo, no value yet) → approving AUTHORISES it
-  //     into a live order the nurse must still carry out → goes to 'pending', so it
-  //     shows up actionable on the nurse board (not as a closed 'approved' item).
-  const isProposal = task.proposed_by_mo === true && task.completion_value == null;
+  //   - a nurse COMPLETION → approving CLOSES it ('approved').
+  //   - an MO PROPOSAL not yet carried out → approving AUTHORISES it into a live
+  //     order the nurse must still do → goes to 'pending', so it shows up actionable
+  //     on the nurse board (not as a closed 'approved' item).
+  // Discriminate on completed_by, NOT completion_value: an MO-proposed action/med
+  // the nurse completes without a measured value still has proposed_by_mo=true and a
+  // null value, so the old value-based check wrongly re-authorised it back to pending
+  // (the nurse had to redo it). completed_by is set only once a nurse charts it.
+  const isProposal = isUnauthorisedProposal(task);
   const approvedAt = new Date().toISOString();
   const { data: updated, error: updateErr } = await supabase
     .from("tasks")

@@ -60,6 +60,20 @@ export function isOpenForNurse(status: TaskStatus): boolean {
   return status === "pending" || status === "in_progress";
 }
 
+// A resident-proposed order still awaiting the attending's authorisation: tagged
+// proposed_by_mo and not yet carried out by a nurse (completed_by null). This is the
+// ONE submitted state approval should AUTHORISE into a live order (→ pending) rather
+// than CLOSE (→ approved). Once the nurse completes it (completed_by set) it is a
+// normal completion awaiting sign-off, even though proposed_by_mo stays true for
+// provenance. Discriminating on completed_by — not completion_value — is the fix:
+// an action/med completion legitimately carries no measured value yet must still
+// close on approval (otherwise the doctor's approve bounces it back to pending).
+export function isUnauthorisedProposal(
+  task: Pick<Task, "proposed_by_mo" | "completed_by">,
+): boolean {
+  return task.proposed_by_mo === true && task.completed_by == null;
+}
+
 // Ward-grid bed colour: red if an active task is critical / a safety override /
 // an abnormal vital, amber if any task is active, green when nothing outstanding.
 export function bedStatusColor(tasks: Task[]): "red" | "amber" | "green" {

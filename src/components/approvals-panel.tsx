@@ -8,7 +8,12 @@ import { useRealtimeTasks } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/supabase/types";
-import { buildPatientMap, isGridCell, type PatientLite } from "@/lib/tasks";
+import {
+  buildPatientMap,
+  isGridCell,
+  isUnauthorisedProposal,
+  type PatientLite,
+} from "@/lib/tasks";
 
 // ApprovalsPanel (Task 5.6 + Enh Day 4) — the attending's live approval queue. Two
 // kinds of item await sign-off: nurse task completions (carry a completion value)
@@ -64,9 +69,11 @@ export function ApprovalsPanel({
   const pending = tasks.filter((t) => t.status === "submitted" && !isGridCell(t));
   if (pending.length === 0) return null;
 
-  // Split the queue: resident-proposed orders vs nurse completions.
-  const proposals = pending.filter((t) => t.proposed_by_mo);
-  const completions = pending.filter((t) => !t.proposed_by_mo);
+  // Split the queue: resident-proposed orders (awaiting authorisation, not yet
+  // carried out) vs nurse completions (incl. of an MO order the nurse has now done —
+  // it carries completed_by, so it belongs with completions, not proposals).
+  const proposals = pending.filter((t) => isUnauthorisedProposal(t));
+  const completions = pending.filter((t) => !isUnauthorisedProposal(t));
 
   async function approve(taskId: string) {
     setApproving(taskId);

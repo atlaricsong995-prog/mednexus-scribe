@@ -20,8 +20,8 @@ export const PRIORITY_BADGE: Record<TaskPriority, string> = {
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   pending: "Pending",
   in_progress: "In progress",
-  submitted: "Awaiting approval",
-  approved: "Approved",
+  submitted: "Awaiting sign-off",
+  approved: "Acknowledged",
   rejected: "Rejected",
 };
 

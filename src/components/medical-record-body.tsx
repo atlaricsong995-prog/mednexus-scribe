@@ -36,8 +36,8 @@ export function MedicalRecordBody({
   if (!note) {
     return (
       <p className="text-sm text-slate-500">
-        No confirmed record yet — it appears here once the doctor confirms a
-        dictated note.
+        No clinical note on file yet — this patient is newly admitted. Dictate a
+        note to create the first record for this admission.
       </p>
     );
   }

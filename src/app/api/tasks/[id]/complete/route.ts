@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRole } from "@/lib/server/role";
-import { DEMO_NURSE_ID } from "@/lib/constants";
+import { DEMO_NURSE_ID, DEMO_NURSE_NAME } from "@/lib/constants";
 import { isAbnormal } from "@/lib/clinical/vocab";
 
 export const runtime = "nodejs";
@@ -25,7 +25,7 @@ export async function PATCH(
   }
 
   const taskId = params.id;
-  let body: { value?: string; notes?: string; nurseName?: string } = {};
+  let body: { value?: string; notes?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -69,8 +69,9 @@ export async function PATCH(
       completion_notes: body.notes?.trim() || null,
       abnormal,
       completed_by: DEMO_NURSE_ID,
-      // Demo nurse identity — who charted/administered (decision E).
-      completed_by_name: body.nurseName?.trim() || null,
+      // Auto-stamped from the logged-in nurse's identity — no manual signature
+      // field (問題 3, decision E). Each nurse account == one signer.
+      completed_by_name: DEMO_NURSE_NAME,
       submitted_at: now,
       approved_at: recordDirect ? now : null,
     })

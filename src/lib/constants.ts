@@ -7,6 +7,11 @@ export const DEMO_DOCTOR_ID = "00000000-0000-0000-0000-000000000001";
 export const DEMO_NURSE_ID = "00000000-0000-0000-0000-000000000002";
 export const DEMO_HEAD_NURSE_ID = "00000000-0000-0000-0000-000000000003";
 
+// Each nurse logs into their own account, so the signer is their identity — not a
+// free-text field they re-type per administration (問題 3, decision E). Demo-grade:
+// the cookie-role nurse charts as this fixed name, stamped automatically.
+export const DEMO_NURSE_NAME = "Nurse Siti";
+
 export const AUDIO_BUCKET = "audio-recordings";
 
 // AI model ids (single source of truth — Tech Spec §4, D-009).

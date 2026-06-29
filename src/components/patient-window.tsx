@@ -32,7 +32,7 @@ import { TaskCard } from "@/components/task-card";
 import { isActive, isUnauthorisedProposal } from "@/lib/tasks";
 import { EscalateButton } from "@/components/escalate-button";
 import { ProposeOrderPanel } from "@/components/propose-order-panel";
-import { canViewRecord } from "@/lib/server/role";
+import { canBreakGlass, canViewRecord } from "@/lib/server/role";
 import type {
   ClinicalNote,
   NurseTask,
@@ -76,6 +76,9 @@ export function PatientWindow({
 }) {
   const allergies = patient.allergies ?? [];
   const showRecord = canViewRecord(role);
+  // Nurse + head nurse don't get the record at all (not even a break-glass lock);
+  // doctor sees it full, MO sees the lock. Hide the whole section otherwise.
+  const showRecordSection = showRecord || canBreakGlass(role);
   const canEscalate =
     role === "nurse" || role === "mo" || role === "head_nurse";
   const canChart = role === "nurse";
@@ -158,32 +161,35 @@ export function PatientWindow({
         </CardContent>
       </Card>
 
-      {/* Section 1 — Medical record (RBAC) */}
-      <Card className="border-slate-200">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+      {/* Section 1 — Medical record (RBAC). Hidden entirely from nurse + head nurse
+          (問題 3 + 4); doctor sees it full, MO via audited break-glass. */}
+      {showRecordSection && (
+        <Card className="border-slate-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              {showRecord ? (
+                <FileText className="h-4 w-4 text-slate-500" />
+              ) : (
+                <Lock className="h-4 w-4 text-slate-500" />
+              )}
+              Medical record
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             {showRecord ? (
-              <FileText className="h-4 w-4 text-slate-500" />
+              <div className="space-y-4">
+                <MedicalRecordBody note={note} />
+                <RecordHistory notes={history} />
+              </div>
             ) : (
-              <Lock className="h-4 w-4 text-slate-500" />
+              <LockedRecord
+                patientId={patient.id}
+                roleLabel={ROLE_LABEL[role ?? "patient"] ?? "a staff member"}
+              />
             )}
-            Medical record
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {showRecord ? (
-            <div className="space-y-4">
-              <MedicalRecordBody note={note} />
-              <RecordHistory notes={history} />
-            </div>
-          ) : (
-            <LockedRecord
-              patientId={patient.id}
-              roleLabel={ROLE_LABEL[role ?? "patient"] ?? "a staff member"}
-            />
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Section 2 — Medication administration record (問題 2) */}
       <Card className="border-slate-200">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BellRing, Check, Loader2, ClipboardPen } from "lucide-react";
+import Link from "next/link";
+import { BellRing, Check, Loader2, ClipboardPen, Mic } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useRealtimeTasks } from "@/hooks/use-realtime";
@@ -75,19 +76,25 @@ export function ApprovalsPanel({
   const proposals = pending.filter((t) => isUnauthorisedProposal(t));
   const completions = pending.filter((t) => !isUnauthorisedProposal(t));
 
-  async function approve(taskId: string) {
+  // Two verbs for the one approve endpoint: AUTHORISE a resident proposal into a
+  // live order vs ACKNOWLEDGE a nurse completion the nurse has already done (問題 3b).
+  async function approve(taskId: string, kind: "proposal" | "completion") {
     setApproving(taskId);
     try {
       const res = await fetch(`/api/tasks/${taskId}/approve`, {
         method: "PATCH",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not approve.");
-      toast({ title: "Approved", description: "Task closed." });
+      if (!res.ok) throw new Error(data.error ?? "Could not complete.");
+      toast(
+        kind === "proposal"
+          ? { title: "Authorised", description: "Now a live order for the nurse." }
+          : { title: "Acknowledged", description: "Nurse completion signed off." },
+      );
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Approve failed",
+        title: kind === "proposal" ? "Authorise failed" : "Acknowledge failed",
         description: err instanceof Error ? err.message : "Unknown error.",
       });
     } finally {
@@ -95,7 +102,7 @@ export function ApprovalsPanel({
     }
   }
 
-  const row = (t: Task) => {
+  const row = (t: Task, kind: "proposal" | "completion") => {
     const p = patientMap.get(t.patient_id);
     return (
       <div
@@ -127,10 +134,20 @@ export function ApprovalsPanel({
             )}
             {t.completion_notes ? ` · ${t.completion_notes}` : ""}
           </p>
+          {/* Abnormal value the nurse flagged — let the doctor act on it (not just
+              acknowledge) by jumping straight to dictating a new order (問題 3d). */}
+          {t.abnormal && p && (
+            <Link
+              href={`/doctor/${encodeURIComponent(p.bed_number)}`}
+              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-red-600 underline-offset-2 hover:underline"
+            >
+              <Mic className="h-3.5 w-3.5" /> Dictate order →
+            </Link>
+          )}
         </div>
         <Button
           size="sm"
-          onClick={() => approve(t.id)}
+          onClick={() => approve(t.id, kind)}
           disabled={approving === t.id}
           className="shrink-0"
         >
@@ -139,7 +156,7 @@ export function ApprovalsPanel({
           ) : (
             <Check className="h-4 w-4" />
           )}
-          Approve
+          {kind === "proposal" ? "Authorise" : "Acknowledge"}
         </Button>
       </div>
     );
@@ -159,7 +176,9 @@ export function ApprovalsPanel({
             <ClipboardPen className="h-3.5 w-3.5" /> Resident-proposed orders (
             {proposals.length})
           </p>
-          <div className="space-y-2">{proposals.map(row)}</div>
+          <div className="space-y-2">
+            {proposals.map((t) => row(t, "proposal"))}
+          </div>
         </div>
       )}
 
@@ -168,7 +187,9 @@ export function ApprovalsPanel({
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-amber-700">
             Nurse completions ({completions.length})
           </p>
-          <div className="space-y-2">{completions.map(row)}</div>
+          <div className="space-y-2">
+            {completions.map((t) => row(t, "completion"))}
+          </div>
         </div>
       )}
     </section>

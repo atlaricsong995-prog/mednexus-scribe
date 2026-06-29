@@ -12,8 +12,16 @@ export function getRole(): Role | null {
   return v ? (v as Role) : null;
 }
 
-// Only the attending doctor sees the full medical record unmasked. Everyone else
-// must break-glass (audited) to view it.
+// Only the attending doctor sees the full medical record unmasked.
 export function canViewRecord(role: Role | null): boolean {
   return role === "doctor";
+}
+
+// Who may reveal a masked record via audited break-glass. Nurses and the head
+// nurse (control tower) don't need the narrative record at all — they work off
+// the MAR, routine timetable, tasks, and special instructions — so the record
+// section is hidden from them entirely, not merely locked (問題 3 + 4). The MO
+// keeps emergency break-glass.
+export function canBreakGlass(role: Role | null): boolean {
+  return role === "mo";
 }

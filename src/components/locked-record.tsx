@@ -38,6 +38,9 @@ export function LockedRecord({
   const [note, setNote] = useState<ClinicalNote | null>(null);
   const [history, setHistory] = useState<ClinicalNote[]>([]);
   const [unlocked, setUnlocked] = useState(false);
+  // After break-glass the record opens in its own modal (same pop-up effect as the
+  // doctor's window) — closing it returns here; re-opening doesn't re-log.
+  const [recordOpen, setRecordOpen] = useState(false);
 
   async function confirm() {
     if (!reason.trim()) return;
@@ -49,6 +52,7 @@ export function LockedRecord({
       setHistory(res.history ?? []);
       setUnlocked(true);
       setOpen(false);
+      setRecordOpen(true);
       toast({
         title: "Break-glass access granted",
         description: "Your access has been logged and the attending notified.",
@@ -64,44 +68,46 @@ export function LockedRecord({
     }
   }
 
-  if (unlocked) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            <span className="font-semibold">Break-glass access — </span>
-            you are viewing a masked record under emergency access. This view is
-            recorded in the audit log.
-          </span>
-        </div>
-        <MedicalRecordBody note={note} />
-        <RecordHistory notes={history} />
-      </div>
-    );
-  }
-
   return (
     <>
       <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 py-8 text-center">
         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-200 text-slate-500">
-          <Lock className="h-5 w-5" />
+          {unlocked ? <ShieldAlert className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
         </span>
         <div>
-          <p className="text-sm font-medium text-slate-700">
-            Medical record restricted
-          </p>
-          <p className="mx-auto mt-0.5 max-w-xs text-xs text-slate-500">
-            The full record is visible to the attending doctor. As {roleLabel}{" "}
-            you may break the glass in an emergency — your access is logged.
-          </p>
+          {unlocked ? (
+            <>
+              <p className="text-sm font-medium text-slate-700">
+                Record unlocked under break-glass
+              </p>
+              <p className="mx-auto mt-0.5 max-w-xs text-xs text-slate-500">
+                Your access was logged and the attending notified. Re-open the
+                record without logging again.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-slate-700">
+                Medical record restricted
+              </p>
+              <p className="mx-auto mt-0.5 max-w-xs text-xs text-slate-500">
+                The full record is visible to the attending doctor. As {roleLabel}{" "}
+                you may break the glass in an emergency — your access is logged.
+              </p>
+            </>
+          )}
         </div>
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => (unlocked ? setRecordOpen(true) : setOpen(true))}
+        >
           <ShieldAlert className="h-4 w-4" />
-          Emergency view (break-glass)
+          {unlocked ? "View record" : "Emergency view (break-glass)"}
         </Button>
       </div>
 
+      {/* Reason prompt — required before the first reveal (logs to audit_log). */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -140,6 +146,29 @@ export function LockedRecord({
               Break glass &amp; view
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* The record itself — shown in a modal after break-glass. */}
+      <Dialog open={recordOpen} onOpenChange={setRecordOpen}>
+        <DialogContent className="max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Medical record — break-glass</DialogTitle>
+            <DialogDescription>
+              Emergency access. This view is recorded in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                <span className="font-semibold">Break-glass access — </span>
+                you are viewing a masked record under emergency access.
+              </span>
+            </div>
+            <MedicalRecordBody note={note} />
+            <RecordHistory notes={history} />
+          </div>
         </DialogContent>
       </Dialog>
     </>

@@ -25,39 +25,21 @@ function dayBounds(now: Date = new Date()): { start: string; end: string } {
 }
 
 // Ensure today's routine cells exist for a patient. Safe to call on every window
-// open: we read the cells already present (by routine_key + slot hour, tolerant of
-// timestamp formatting) and insert only the missing ones. The partial unique index
-// (migration 006) is a second guard against races.
+// open AND concurrently: a single upsert with ignoreDuplicates lets the DB's unique
+// index (patient_id, routine_key, scheduled_for — migration 008) absorb races. This
+// matters because the master-detail prefetches patient links, firing this from
+// several requests at once; a read-then-insert raced and produced duplicate cells.
 export async function ensureTodayRoutine(
   patientId: string,
   ward: string,
 ): Promise<void> {
   const supabase = createAdminClient();
-  const { start, end } = dayBounds();
   const slots = todayRoutineSlots();
-
-  const { data: existing } = await supabase
-    .from("tasks")
-    .select("routine_key, scheduled_for")
-    .eq("patient_id", patientId)
-    .not("routine_key", "is", null)
-    .gte("scheduled_for", start)
-    .lte("scheduled_for", end);
-
-  const have = new Set(
-    (existing ?? []).map(
-      (r) =>
-        `${r.routine_key}|${
-          r.scheduled_for ? new Date(r.scheduled_for).getHours() : "?"
-        }`,
-    ),
-  );
 
   const rows: TaskInsert[] = [];
   for (const obs of DEFAULT_ROUTINE) {
     const key = routineKey(obs);
     for (const slot of slots) {
-      if (have.has(`${key}|${slot.hour}`)) continue;
       rows.push({
         note_id: null,
         patient_id: patientId,
@@ -73,10 +55,14 @@ export async function ensureTodayRoutine(
     }
   }
 
-  if (rows.length > 0) {
-    // Ignore a unique-violation from a concurrent open — the cells exist either way.
-    await supabase.from("tasks").insert(rows);
-  }
+  // ignoreDuplicates: existing cells (incl. already-charted ones) are left untouched;
+  // only genuinely missing slots are inserted. Concurrent calls can't double-insert.
+  await supabase
+    .from("tasks")
+    .upsert(rows, {
+      onConflict: "patient_id,routine_key,scheduled_for",
+      ignoreDuplicates: true,
+    });
 }
 
 // Today's routine cells for a patient, ordered chronologically. Used to render the
@@ -94,5 +80,19 @@ export async function getTodayRoutineTasks(
     .gte("scheduled_for", start)
     .lte("scheduled_for", end)
     .order("scheduled_for", { ascending: true });
+  return (data as Task[]) ?? [];
+}
+
+// MAR cells for a patient (問題 2) — the give-time grid materialised at dispatch.
+// No date bound: PRN administrations carry scheduled_for = null, and a re-dispatch
+// already supersedes prior pending cells, so this is the current order set.
+export async function getTodayMedTasks(patientId: string): Promise<Task[]> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("patient_id", patientId)
+    .not("med_key", "is", null)
+    .order("scheduled_for", { ascending: true, nullsFirst: false });
   return (data as Task[]) ?? [];
 }

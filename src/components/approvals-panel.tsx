@@ -8,7 +8,7 @@ import { useRealtimeTasks } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/supabase/types";
-import { buildPatientMap, isRoutine, type PatientLite } from "@/lib/tasks";
+import { buildPatientMap, isGridCell, type PatientLite } from "@/lib/tasks";
 
 // ApprovalsPanel (Task 5.6 + Enh Day 4) — the attending's live approval queue. Two
 // kinds of item await sign-off: nurse task completions (carry a completion value)
@@ -48,20 +48,20 @@ export function ApprovalsPanel({
     initialTasks,
     // MO proposals arrive as fresh INSERTs already in 'submitted'.
     onInsert: (task) => {
-      if (task.status === "submitted" && !isRoutine(task)) notifySubmission(task);
+      if (task.status === "submitted" && !isGridCell(task)) notifySubmission(task);
     },
     onUpdate: (task, prev) => {
       if (
         task.status === "submitted" &&
         prev.status !== "submitted" &&
-        !isRoutine(task)
+        !isGridCell(task)
       ) {
         notifySubmission(task);
       }
     },
   });
 
-  const pending = tasks.filter((t) => t.status === "submitted" && !isRoutine(t));
+  const pending = tasks.filter((t) => t.status === "submitted" && !isGridCell(t));
   if (pending.length === 0) return null;
 
   // Split the queue: resident-proposed orders vs nurse completions.

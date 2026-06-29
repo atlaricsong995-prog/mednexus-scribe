@@ -212,6 +212,82 @@ export function routineObsFromKey(
   return isObsType(obs) ? obs : null;
 }
 
+// --- Medication administration record (MAR) -------------------------------
+//
+// Medications fan out into a give-time grid the same way routine vitals do:
+// row = drug, columns = today's administration slots for its frequency. "Today
+// only" (user decision: no scheduler). These are demo defaults — a sensible MAR
+// timetable, not a clinical bible. PRN has no fixed slot (recorded ad-hoc when
+// given); STAT is a single dose now (resolved at dispatch time, not from here).
+
+export const FREQ_SLOTS: Record<string, number[]> = {
+  od: [8],
+  daily: [8],
+  om: [8],
+  on: [22],
+  bd: [8, 20],
+  bid: [8, 20],
+  q12h: [8, 20],
+  tds: [8, 14, 22],
+  tid: [8, 14, 22],
+  q8h: [6, 14, 22],
+  qds: [8, 12, 16, 20],
+  qid: [8, 12, 16, 20],
+  q6h: [0, 6, 12, 18],
+  q4h: [0, 4, 8, 12, 16, 20],
+  // prn / stat handled specially (see medSlotHours) — no fixed grid here.
+};
+
+export const MED_PREFIX = "med";
+
+// A MAR row key from the drug name — lowercased, spaces/punctuation collapsed so
+// the same drug always maps to the same row (e.g. "Augmentin" -> 'med:augmentin').
+export function medKey(drug: string): string {
+  const slug = (drug ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${MED_PREFIX}:${slug || "drug"}`;
+}
+
+export function isMedKey(key: string | null | undefined): boolean {
+  return !!key && key.startsWith(`${MED_PREFIX}:`);
+}
+
+// Today's administration hours for a frequency. PRN -> [] (no fixed slot; charted
+// ad-hoc). STAT -> a single "now" slot the caller anchors to the current hour.
+// Unknown/free-text frequency -> [] (the drug still lists as a once-now row so it
+// never silently vanishes — caller decides; see dispatch).
+export function medSlotHours(frequency: string): number[] {
+  const f = (frequency ?? "").toLowerCase().replace(/[\s.]/g, "");
+  if (!f) return [];
+  if (f.includes("prn")) return [];
+  if (f.includes("stat")) return [new Date().getHours()];
+  if (FREQ_SLOTS[f]) return FREQ_SLOTS[f];
+  for (const [token, hours] of Object.entries(FREQ_SLOTS)) {
+    if (f.includes(token)) return hours;
+  }
+  return [];
+}
+
+// Today's MAR slots for a frequency, as ISO timestamps anchored to the local day
+// (mirrors todayRoutineSlots). Empty for PRN / unknown frequencies.
+export function todayMedSlots(
+  frequency: string,
+  now: Date = new Date(),
+): RoutineSlot[] {
+  return medSlotHours(frequency).map((hour) => {
+    const d = new Date(now);
+    d.setHours(hour, 0, 0, 0);
+    return {
+      hour,
+      iso: d.toISOString(),
+      label: `${String(hour).padStart(2, "0")}:00`,
+    };
+  });
+}
+
 export interface RoutineSlot {
   hour: number;
   iso: string; // today at this hour (local), as an ISO timestamp

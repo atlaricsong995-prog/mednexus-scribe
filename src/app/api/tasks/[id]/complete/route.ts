@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getRole } from "@/lib/server/role";
 import { DEMO_NURSE_ID } from "@/lib/constants";
 import { isAbnormal } from "@/lib/clinical/vocab";
 
@@ -15,8 +16,16 @@ export async function PATCH(
   req: Request,
   { params }: { params: { id: string } },
 ) {
+  // RBAC: the head nurse's view is read-only — she monitors, she doesn't chart.
+  if (getRole() === "head_nurse") {
+    return NextResponse.json(
+      { error: "The head nurse view is read-only." },
+      { status: 403 },
+    );
+  }
+
   const taskId = params.id;
-  let body: { value?: string; notes?: string } = {};
+  let body: { value?: string; notes?: string; nurseName?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -27,7 +36,7 @@ export async function PATCH(
 
   const { data: task, error: fetchErr } = await supabase
     .from("tasks")
-    .select("id, status, obs_type, routine_key")
+    .select("id, status, obs_type, routine_key, med_key")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -46,21 +55,24 @@ export async function PATCH(
   // — don't trust a client-sent flag). Abnormal vitals render red on the boards.
   const abnormal = isAbnormal(task.obs_type, value);
 
-  // Routine timetable cells (Enh Day 3) are charted vitals, not orders that need a
-  // doctor's sign-off — record them straight to 'approved' so they never clutter
-  // the attending's approval queue. Ad-hoc nurse tasks still go via 'submitted'.
-  const isRoutine = !!task.routine_key;
+  // Charted-not-approved cells record straight to 'approved' so they never clutter
+  // the attending's approval queue: routine vitals (Enh Day 3) and MAR drug
+  // administrations (問題 2 — the nurse signs the give, it isn't re-approved by a
+  // doctor). Ad-hoc nurse tasks still go via 'submitted' for sign-off.
+  const recordDirect = !!task.routine_key || !!task.med_key;
   const now = new Date().toISOString();
   const { data: updated, error: updateErr } = await supabase
     .from("tasks")
     .update({
-      status: isRoutine ? "approved" : "submitted",
+      status: recordDirect ? "approved" : "submitted",
       completion_value: value,
       completion_notes: body.notes?.trim() || null,
       abnormal,
       completed_by: DEMO_NURSE_ID,
+      // Demo nurse identity — who charted/administered (decision E).
+      completed_by_name: body.nurseName?.trim() || null,
       submitted_at: now,
-      approved_at: isRoutine ? now : null,
+      approved_at: recordDirect ? now : null,
     })
     .eq("id", taskId)
     .select("*")
@@ -86,6 +98,7 @@ export async function PATCH(
       completion_notes: updated.completion_notes,
       obs_type: updated.obs_type,
       abnormal: updated.abnormal,
+      completed_by_name: updated.completed_by_name,
     },
   });
 

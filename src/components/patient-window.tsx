@@ -12,7 +12,9 @@ import {
   FileText,
   CalendarClock,
   ClipboardList,
+  ListTodo,
   Lock,
+  Pill,
 } from "lucide-react";
 
 import {
@@ -24,7 +26,10 @@ import {
 import { MedicalRecordBody } from "@/components/medical-record-body";
 import { RecordHistory } from "@/components/record-history";
 import { LockedRecord } from "@/components/locked-record";
+import { MedicationTimetable } from "@/components/medication-timetable";
 import { RoutineTimetable } from "@/components/routine-timetable";
+import { TaskCard } from "@/components/task-card";
+import { isActive } from "@/lib/tasks";
 import { EscalateButton } from "@/components/escalate-button";
 import { ProposeOrderPanel } from "@/components/propose-order-panel";
 import { canViewRecord } from "@/lib/server/role";
@@ -50,6 +55,8 @@ export function PatientWindow({
   history = [],
   watchFor = [],
   routineTasks = [],
+  medTasks = [],
+  adHocTasks = [],
 }: {
   patient: Patient;
   role: Role | null;
@@ -61,11 +68,27 @@ export function PatientWindow({
   watchFor?: NurseTask[];
   // Today's routine vitals cells for the timetable grid.
   routineTasks?: Task[];
+  // MAR cells (per-drug give-time grid) for the medication timetable.
+  medTasks?: Task[];
+  // Ad-hoc tasks for this patient (procedures, one-off obs, authorised MO orders)
+  // — the completable worklist. Excludes grid cells (MAR / routine).
+  adHocTasks?: Task[];
 }) {
   const allergies = patient.allergies ?? [];
   const showRecord = canViewRecord(role);
   const canEscalate =
     role === "nurse" || role === "mo" || role === "head_nurse";
+  const canChart = role === "nurse";
+  // Outstanding ad-hoc tasks: hide MO proposals still awaiting the attending; show
+  // active ones first, then recently closed. The nurse can complete; others view.
+  const tasks = [...adHocTasks]
+    .filter((t) => !(t.proposed_by_mo && t.status === "submitted"))
+    .sort((a, b) => {
+      const aa = isActive(a.status) ? 0 : 1;
+      const bb = isActive(b.status) ? 0 : 1;
+      if (aa !== bb) return aa - bb;
+      return b.created_at.localeCompare(a.created_at);
+    });
   const patientLite = {
     id: patient.id,
     full_name: patient.full_name,
@@ -160,7 +183,22 @@ export function PatientWindow({
         </CardContent>
       </Card>
 
-      {/* Section 2 — Routine timetable (Enh Day 3) */}
+      {/* Section 2 — Medication administration record (問題 2) */}
+      <Card className="border-slate-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Pill className="h-4 w-4 text-slate-500" /> Medication record (MAR)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MedicationTimetable
+            medTasks={medTasks}
+            readOnly={role !== "nurse"}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Section 3 — Routine timetable (Enh Day 3) */}
       <Card className="border-slate-200">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -168,14 +206,41 @@ export function PatientWindow({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <RoutineTimetable patient={patientLite} routineTasks={routineTasks} />
+          <RoutineTimetable
+            patient={patientLite}
+            routineTasks={routineTasks}
+            readOnly={!canChart}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Outstanding tasks — ad-hoc orders the nurse completes (others view) */}
+      <Card className="border-slate-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ListTodo className="h-4 w-4 text-slate-500" /> Outstanding tasks
+            <span className="text-sm font-normal text-slate-400">
+              ({tasks.filter((t) => isActive(t.status)).length})
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tasks.length === 0 ? (
+            <p className="text-sm text-slate-500">No ad-hoc tasks for this patient.</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {tasks.map((t) => (
+                <TaskCard key={t.id} task={t} interactive={canChart} />
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* MO-only — propose an order to the attending (Enh Day 4) */}
       {role === "mo" && <ProposeOrderPanel patientId={patient.id} />}
 
-      {/* Section 3 — Special instructions (display-only + escalate) */}
+      {/* Section 4 — Special instructions (display-only + escalate) */}
       <Card className="border-slate-200">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2">

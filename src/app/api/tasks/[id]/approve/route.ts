@@ -19,7 +19,7 @@ export async function PATCH(
 
   const { data: task, error: fetchErr } = await supabase
     .from("tasks")
-    .select("id, status")
+    .select("id, status, proposed_by_mo, completion_value")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -33,10 +33,20 @@ export async function PATCH(
     );
   }
 
+  // Two kinds of 'submitted' task approve in opposite directions:
+  //   - a nurse COMPLETION (has a value) → approving CLOSES it ('approved').
+  //   - an MO PROPOSAL (proposed_by_mo, no value yet) → approving AUTHORISES it
+  //     into a live order the nurse must still carry out → goes to 'pending', so it
+  //     shows up actionable on the nurse board (not as a closed 'approved' item).
+  const isProposal = task.proposed_by_mo === true && task.completion_value == null;
   const approvedAt = new Date().toISOString();
   const { data: updated, error: updateErr } = await supabase
     .from("tasks")
-    .update({ status: "approved", approved_at: approvedAt })
+    .update(
+      isProposal
+        ? { status: "pending" }
+        : { status: "approved", approved_at: approvedAt },
+    )
     .eq("id", taskId)
     .select("*")
     .single();
@@ -58,6 +68,9 @@ export async function PATCH(
       patient_id: updated.patient_id,
       ward: updated.ward,
       completion_value: updated.completion_value,
+      // Provenance: this approval authorised a resident's proposed order into a
+      // live task for the nurse (rather than closing a completed task).
+      authorised_mo_order: isProposal,
     },
   });
 

@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_DOCTOR_ID } from "@/lib/constants";
 import { checkMedicationSafety } from "@/lib/safety";
+import { medKey, todayMedSlots } from "@/lib/clinical/vocab";
 import { ExtractSchema } from "@/lib/ai/schemas";
 import type {
   Medication,
@@ -231,24 +232,49 @@ export async function POST(req: Request) {
     .eq("status", "confirmed")
     .neq("id", noteId);
 
-  // 3. Build tasks rows — medications + nurse_tasks (Tech Spec §2.1 mapping).
-  const medicationRows = medications.map((m) => {
+  // Supersede prior un-administered MAR cells: a newly-confirmed order replaces the
+  // old standing medication orders. Already-charted (approved) cells stay as history;
+  // pending cells from earlier notes are cleared so the give-time grid reflects the
+  // new orders (and the per-(patient,drug,slot) unique index can't collide on
+  // re-dispatch).
+  await supabase
+    .from("tasks")
+    .delete()
+    .eq("patient_id", note.patient_id)
+    .not("med_key", "is", null)
+    .in("status", ["pending", "in_progress"]);
+
+  // 3. Build tasks rows — medications fan out into a MAR (one cell per drug ×
+  // today's administration slot); nurse_tasks map 1:1 (Tech Spec §2.1 mapping).
+  // Each drug becomes a give-time grid: one cell per administration slot today
+  // (from its frequency). PRN / unknown frequencies get a single no-fixed-time cell
+  // charted ad-hoc. Safety alert + override priority apply to EVERY cell of a
+  // flagged drug, so the whole MAR row reads hot.
+  const medicationRows = medications.flatMap((m) => {
     const flag = criticalFlags.find(
       (f) => overriddenCriticalDrugs.has(m.drug.toLowerCase()) && f.drug.toLowerCase() === m.drug.toLowerCase(),
     );
-    return {
+    const description = medicationDescription(m);
+    const key = medKey(m.drug);
+    const slots = todayMedSlots(m.frequency);
+    // PRN / unknown frequency → one ad-hoc cell (scheduled_for null).
+    const cells: (string | null)[] =
+      slots.length > 0 ? slots.map((s) => s.iso) : [null];
+    return cells.map((scheduledFor) => ({
       note_id: noteId,
       patient_id: note.patient_id,
       ward: patient.ward,
       task_type: "medication" as TaskType,
-      description: medicationDescription(m),
+      description,
       obs_type: null as string | null,
-      scheduled_for: null,
+      routine_key: null as string | null,
+      med_key: key,
+      scheduled_for: scheduledFor,
       conditions: null,
       // Critical-flagged drug dispatched under doctor override → nurse alert.
       safety_alert: flag ? flag.reason : null,
       priority: flag ? ("high" as const) : ("normal" as const),
-    };
+    }));
   });
 
   const nurseRows = nurseTasks.map((t) => {
@@ -263,6 +289,8 @@ export async function POST(req: Request) {
       // Controlled observation type → nurse gets a fixed-unit input and the
       // recorded value is range-checked for the abnormal-vital highlight.
       obs_type: t.obs_type ?? null,
+      routine_key: null as string | null,
+      med_key: null as string | null,
       scheduled_for: scheduledFor,
       conditions: t.conditions ?? null,
       safety_alert: null as string | null,

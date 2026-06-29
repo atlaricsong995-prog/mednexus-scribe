@@ -17,7 +17,7 @@ import {
   bedStatusColor,
   buildPatientMap,
   isActive,
-  isRoutine,
+  isGridCell,
   STATUS_LABEL,
   type PatientLite,
 } from "@/lib/tasks";
@@ -127,11 +127,11 @@ export function ControlTowerBoard({
     initialTasks,
     // Routine timetable cells ride the same channel — exclude them from the feed.
     onInsert: (task) => {
-      if (isRoutine(task)) return;
+      if (isGridCell(task)) return;
       pushFeed(task, "dispatch", "Dispatched");
     },
     onUpdate: (task) => {
-      if (isRoutine(task)) return;
+      if (isGridCell(task)) return;
       if (task.status === "submitted")
         pushFeed(
           task,
@@ -144,7 +144,7 @@ export function ControlTowerBoard({
     },
   });
 
-  const tasks = useMemo(() => allTasks.filter((t) => !isRoutine(t)), [allTasks]);
+  const tasks = useMemo(() => allTasks.filter((t) => !isGridCell(t)), [allTasks]);
 
   const tasksByPatient = useMemo(() => {
     const m = new Map<string, Task[]>();

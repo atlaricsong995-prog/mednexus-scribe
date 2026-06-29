@@ -4,16 +4,7 @@ import { ChevronLeft } from "lucide-react";
 
 import { PatientWindow } from "@/components/patient-window";
 import { getRole } from "@/lib/server/role";
-import {
-  getPatientByBed,
-  getLatestConfirmedNote,
-  getRecordHistory,
-} from "@/lib/server/patient-window-data";
-import {
-  ensureTodayRoutine,
-  getTodayRoutineTasks,
-} from "@/lib/server/routine";
-import type { NurseTask } from "@/lib/supabase/types";
+import { getPatientWindowData } from "@/lib/server/patient-window-data";
 import { WARD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -31,33 +22,12 @@ export default async function PatientWindowPage({
   params: { bedId: string };
 }) {
   const role = getRole();
-  const patient = await getPatientByBed(
+  const data = await getPatientWindowData(
     WARD,
     decodeURIComponent(params.bedId),
+    role,
   );
-  if (!patient) notFound();
-
-  // Materialise today's routine vitals for this patient (idempotent), then load
-  // them for the timetable grid. Visible to every role.
-  await ensureTodayRoutine(patient.id, patient.ward);
-
-  // The current confirmed note: needed unmasked for the doctor's record body +
-  // history, and (for all roles) to derive the operational "watch-for" list. The
-  // record body / history are only passed through when the role may see them; the
-  // watch-for tasks are operational and shown to everyone.
-  const [currentNote, routineTasks] = await Promise.all([
-    getLatestConfirmedNote(patient.id),
-    getTodayRoutineTasks(patient.id),
-  ]);
-
-  const showRecord = role === "doctor";
-  const note = showRecord ? currentNote : null;
-  const history = showRecord ? await getRecordHistory(patient.id) : [];
-
-  const watchFor: NurseTask[] =
-    currentNote?.nurse_tasks.filter(
-      (t) => t.conditions || t.priority === "high" || t.priority === "critical",
-    ) ?? [];
+  if (!data) notFound();
 
   const back = BACK[role ?? ""] ?? { href: "/", label: "Home" };
 
@@ -72,12 +42,14 @@ export default async function PatientWindowPage({
       </Link>
 
       <PatientWindow
-        patient={patient}
+        patient={data.patient}
         role={role}
-        note={note}
-        history={history}
-        watchFor={watchFor}
-        routineTasks={routineTasks}
+        note={data.note}
+        history={data.history}
+        watchFor={data.watchFor}
+        routineTasks={data.routineTasks}
+        medTasks={data.medTasks}
+        adHocTasks={data.adHocTasks}
       />
     </main>
   );

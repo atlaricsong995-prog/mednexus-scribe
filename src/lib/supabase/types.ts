@@ -202,6 +202,8 @@ export interface Database {
           obs_type: string | null;
           // Non-null marks a materialised routine-timetable cell (e.g. 'vitals:bp').
           routine_key: string | null;
+          // Non-null marks a materialised MAR cell (e.g. 'med:augmentin').
+          med_key: string | null;
           // A resident's proposed order awaiting attending approval (Enh Day 4).
           proposed_by_mo: boolean;
           scheduled_for: string | null;
@@ -212,6 +214,8 @@ export interface Database {
           status: TaskStatus;
           assigned_to: string | null;
           completed_by: string | null;
+          // Demo nurse identity (name string) — who charted/administered.
+          completed_by_name: string | null;
           completion_value: string | null;
           completion_notes: string | null;
           submitted_at: string | null;
@@ -227,6 +231,7 @@ export interface Database {
           description: string;
           obs_type?: string | null;
           routine_key?: string | null;
+          med_key?: string | null;
           proposed_by_mo?: boolean;
           scheduled_for?: string | null;
           conditions?: string | null;
@@ -236,6 +241,7 @@ export interface Database {
           status?: TaskStatus;
           assigned_to?: string | null;
           completed_by?: string | null;
+          completed_by_name?: string | null;
           completion_value?: string | null;
           completion_notes?: string | null;
           submitted_at?: string | null;

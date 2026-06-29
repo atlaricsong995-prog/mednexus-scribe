@@ -1,14 +1,25 @@
 import Link from "next/link";
 import { LayoutDashboard } from "lucide-react";
 
-import { ControlTowerBoard } from "@/components/control-tower-board";
+import { PatientWindow } from "@/components/patient-window";
+import { WardWorklist } from "@/components/ward-worklist";
+import { getRole } from "@/lib/server/role";
 import { getWardData } from "@/lib/server/ward-data";
+import { getPatientWindowData } from "@/lib/server/patient-window-data";
 import { WARD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
-export default async function ControlTowerPage() {
+export default async function ControlTowerPage({
+  searchParams,
+}: {
+  searchParams: { bed?: string };
+}) {
+  const role = getRole();
   const { patients, tasks } = await getWardData(WARD);
+  const bed = searchParams.bed ?? null;
+
+  const data = bed ? await getPatientWindowData(WARD, bed, role) : null;
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-8">
@@ -35,7 +46,27 @@ export default async function ControlTowerPage() {
         </Link>
       </header>
 
-      <ControlTowerBoard ward={WARD} initialTasks={tasks} patients={patients} />
+      <WardWorklist
+        ward={WARD}
+        patients={patients}
+        initialTasks={tasks}
+        selectedBed={bed}
+        basePath="/control-tower"
+        showActivity
+      >
+        {data && (
+          <PatientWindow
+            patient={data.patient}
+            role={role}
+            note={data.note}
+            history={data.history}
+            watchFor={data.watchFor}
+            routineTasks={data.routineTasks}
+            medTasks={data.medTasks}
+            adHocTasks={data.adHocTasks}
+          />
+        )}
+      </WardWorklist>
     </main>
   );
 }

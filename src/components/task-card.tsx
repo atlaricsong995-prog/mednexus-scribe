@@ -38,12 +38,16 @@ function whenLabel(task: Task): string | null {
 export function TaskCard({
   task,
   patient,
+  interactive = true,
 }: {
   task: Task;
   patient?: PatientLite;
+  // When false (read-only roles like the head nurse), show status only — no
+  // completion action.
+  interactive?: boolean;
 }) {
   const due = whenLabel(task);
-  const open = isOpenForNurse(task.status);
+  const open = isOpenForNurse(task.status) && interactive;
 
   return (
     <Card

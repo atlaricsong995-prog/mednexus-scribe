@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, FolderOpen } from "lucide-react";
 
 import { PatientSummary } from "@/components/patient-summary";
+import { PatientWindow } from "@/components/patient-window";
+import { PatientWindowModal } from "@/components/patient-window-modal";
 import { Recorder } from "@/components/recorder";
-import { createClient } from "@/lib/supabase/server";
+import { getRole } from "@/lib/server/role";
+import { getPatientWindowData } from "@/lib/server/patient-window-data";
 import { WARD } from "@/lib/constants";
-import type { Patient } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +17,15 @@ export default async function PatientDetailPage({
 }: {
   params: { bedId: string };
 }) {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("patients")
-    .select("*")
-    .eq("ward", WARD)
-    .eq("bed_number", decodeURIComponent(params.bedId))
-    .maybeSingle();
+  const role = getRole();
+  const data = await getPatientWindowData(
+    WARD,
+    decodeURIComponent(params.bedId),
+    role,
+  );
+  if (!data) notFound();
 
-  const patient = data as Patient | null;
-  if (!patient) notFound();
+  const { patient } = data;
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-8">
@@ -39,16 +40,33 @@ export default async function PatientDetailPage({
       <div className="space-y-6">
         <PatientSummary patient={patient} />
 
-        <Link
-          href={`/patient/${encodeURIComponent(patient.bed_number)}`}
-          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 transition-colors hover:border-slate-900"
+        {/* Open the full window in a modal — closing it returns here, not the ward. */}
+        <PatientWindowModal
+          title={`${patient.full_name} · Bed ${patient.bed_number}`}
+          trigger={
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 transition-colors hover:border-slate-900"
+            >
+              <span className="flex items-center gap-2">
+                <FolderOpen className="h-4 w-4" />
+                Open full patient window (record · MAR · timetable · instructions)
+              </span>
+              <span className="text-slate-400">→</span>
+            </button>
+          }
         >
-          <span className="flex items-center gap-2">
-            <FolderOpen className="h-4 w-4" />
-            Open full patient window (record · timetable · instructions)
-          </span>
-          <span className="text-slate-400">→</span>
-        </Link>
+          <PatientWindow
+            patient={patient}
+            role={role}
+            note={data.note}
+            history={data.history}
+            watchFor={data.watchFor}
+            routineTasks={data.routineTasks}
+            medTasks={data.medTasks}
+            adHocTasks={data.adHocTasks}
+          />
+        </PatientWindowModal>
 
         <section>
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">

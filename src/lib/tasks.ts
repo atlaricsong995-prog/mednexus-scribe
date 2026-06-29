@@ -44,6 +44,18 @@ export function isRoutine(task: Task): boolean {
   return task.routine_key != null;
 }
 
+// Materialised MAR cell (問題 2) — a per-slot medication administration, lives only
+// in the patient-window give-time grid (mirrors routine cells).
+export function isMedCell(task: Task): boolean {
+  return task.med_key != null;
+}
+
+// Any timetable grid cell (routine vitals OR MAR give-times). The ad-hoc boards
+// exclude all of these — they belong to the patient-window grids, not the flat feed.
+export function isGridCell(task: Task): boolean {
+  return task.routine_key != null || task.med_key != null;
+}
+
 export function isOpenForNurse(status: TaskStatus): boolean {
   return status === "pending" || status === "in_progress";
 }

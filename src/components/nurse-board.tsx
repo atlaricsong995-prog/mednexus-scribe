@@ -8,7 +8,7 @@ import { useRealtimeTasks } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/supabase/types";
-import { buildPatientMap, isActive, isRoutine, type PatientLite } from "@/lib/tasks";
+import { buildPatientMap, isActive, isGridCell, type PatientLite } from "@/lib/tasks";
 
 const PRIORITY_RANK: Record<TaskPriority, number> = {
   critical: 0,
@@ -56,7 +56,7 @@ export function NurseBoard({
     onInsert: (task) => {
       // Routine timetable cells (materialised when a patient window opens) ride the
       // same channel — don't surface them on the ad-hoc board.
-      if (isRoutine(task)) return;
+      if (isGridCell(task)) return;
       const p = patientMap.get(task.patient_id);
       toast({
         title:
@@ -68,7 +68,7 @@ export function NurseBoard({
     },
   });
 
-  const tasks = useMemo(() => allTasks.filter((t) => !isRoutine(t)), [allTasks]);
+  const tasks = useMemo(() => allTasks.filter((t) => !isGridCell(t)), [allTasks]);
   const sorted = useMemo(() => sortTasks(tasks), [tasks]);
   const openCount = tasks.filter((t) => isActive(t.status)).length;
   const live = status === "subscribed";

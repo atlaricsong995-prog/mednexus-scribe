@@ -22,9 +22,10 @@ export async function getWardData(
     supabase
       .from("tasks")
       .select("*")
-      // Routine timetable cells live only in the patient window — keep the ad-hoc
-      // nurse board / control tower / approvals feed clean (Enh Day 3).
+      // Grid cells (routine vitals + MAR give-times) live only in the patient
+      // window — keep the ad-hoc worklist / control tower / approvals feed clean.
       .is("routine_key", null)
+      .is("med_key", null)
       .eq("ward", ward)
       .order("created_at", { ascending: false }),
   ]);

@@ -4,6 +4,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ensureTodayRoutine,
+  ensureTodayMeds,
   getTodayRoutineTasks,
   getTodayMedTasks,
 } from "@/lib/server/routine";
@@ -98,8 +99,13 @@ export async function getPatientWindowData(
   const patient = await getPatientByBed(ward, bedNumber);
   if (!patient) return null;
 
-  // Materialise today's routine vitals (idempotent), then load the grids.
-  await ensureTodayRoutine(patient.id, patient.ward);
+  // Materialise today's routine vitals + MAR give-times (idempotent), then load the
+  // grids. Both re-materialise per day so a multi-day order / standing routine shows
+  // fresh cells today instead of the dispatch day's.
+  await Promise.all([
+    ensureTodayRoutine(patient.id, patient.ward),
+    ensureTodayMeds(patient.id, patient.ward),
+  ]);
 
   const [currentNote, routineTasks, medTasks, adHocTasks] = await Promise.all([
     getLatestConfirmedNote(patient.id),

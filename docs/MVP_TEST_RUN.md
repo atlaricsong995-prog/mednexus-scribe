@@ -28,7 +28,7 @@
 - console 無錯誤。
 
 **⏳ 待 Script A 重錄驗證**：A（override 原因閉環）、B（分流）、E（admin instruction 抽取 + MAR 顯示）走的是 **口述→草稿→派發** 管線，需錄音才看得到 live，由 Script A 重錄涵蓋。
-**🧹 實測留下的資料**（床 12 / MRN001）：一筆 16:00 BP 200/120 charted、一筆 pending 的 Amlodipine resident proposal——重錄 Script A 前可忽略或自行清掉。
+**🧹 實測資料已清理**（床 12 / MRN001）：驗證造的 BP 200/120、Amlodipine proposal、auto-escalation 都已移除，**床 12 已重置回 baseline**（另清掉兩條更早的 escalation）。可直接重錄 Script A。註：重置後床 12 的 Special Instructions 仍有既定醫囑（glucose QDS + wound obs）是**預設病歷使然，非殘留**；要完全空白的病人用床 17（MRN006，新入院無 note）。
 
 ---
 

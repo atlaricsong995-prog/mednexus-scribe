@@ -5,6 +5,33 @@
 
 ---
 
+## 🆕 臨床擬真強化更新（2026-06-30）
+
+> **這一輪 = 測 Script A 時發現的六個臨床邏輯修正。** 設計文件：`docs/superpowers/specs/2026-06-30-clinical-escalation-override-realism-design.md`。
+> **狀態：全部完成、tsc + lint 乾淨、已 commit（`00dc436`）。無需 migration**（全部沿用既有欄位 / jsonb / audit_log）。
+
+**A. Override 必填原因**：過敏（critical）旗標下，**沒寫原因不准 dispatch**（前後端雙重把關）。醫生的 override 原因會**一起推到護士 MAR 徽章**（原本只顯示「為什麼危險」，現在加「醫生為什麼仍開」）。warning 旗標原因仍選填。
+
+**B. 觀測分流**（新檔 `src/lib/clinical/obs-routing.ts`，確定性、不走 LLM）：常規生命徵象（BP/HR/temp/SpO₂）且**無特殊時點/條件 → 不再生重複 task**（grid 已涵蓋）；有條件/特殊時點（如「服藥後 1hr 量 BP」）或非常規觀測（血糖）→ 照常進 Special Instructions / 可填值 task。
+
+**C. 兩段閾值 + 自動 escalate**：`OBSERVATION_CATALOG` 每項加 **critical 內帶** + `obsSeverity()`。護士記錄值進 critical 帶 → **自動寫 escalation 到主治 inbox**（沿用現有 realtime）。輕度 abnormal 只變紅、**不通知**（避免 alert fatigue）。grid cell 與血糖 obs 共用同一條規則。
+- critical 帶：血糖 `<3 或 >20`、SBP `>180`/`<80`、DBP `>110`/`<50`、SpO₂ `<90`、temp `>39.5`、HR `<40`/`>130`、RR `<8`/`>30`。
+- **escalation 依 catalog critical 帶觸發**，不解析口述自訂閾值（口述「>15」只當 Special Instruction 顯示文字）。
+
+**D. MO propose 理由**：propose 面板加**選填「Reason / 臨床 rationale」**，顯示在主治審批卡（`Rationale: …`，藍字）。多筆 order 維持一次一筆連續送。
+
+**E. 給藥注意事項**：`Medication` 加選填 `admin_instruction`（飯前/隨餐/飯後/空腹/at night），Gemini 抽取 + 開藥 UI 可選，**併入 MAR 列標籤顯示給護士**。純 advisory，**不改排程**。
+
+**✅ 瀏覽器實測通過（live）：**
+- **C**：床 12 路由表 BP 格填 **200/120** → toast「Abnormal value recorded」→ 切 `/doctor` inbox 出現 **「Auto-Monitor · escalated — Critical Blood pressure 200/120 mmHg — auto-escalated」**。
+- **D**：`/mo` 床 12 propose **Amlodipine** + 理由「BP 200/120 — uptitrate antihypertensive」→ `/doctor` 審批區出現 **「Amlodipine · proposed by resident · Rationale: …」** + Authorise。
+- console 無錯誤。
+
+**⏳ 待 Script A 重錄驗證**：A（override 原因閉環）、B（分流）、E（admin instruction 抽取 + MAR 顯示）走的是 **口述→草稿→派發** 管線，需錄音才看得到 live，由 Script A 重錄涵蓋。
+**🧹 實測留下的資料**（床 12 / MRN001）：一筆 16:00 BP 200/120 charted、一筆 pending 的 Amlodipine resident proposal——重錄 Script A 前可忽略或自行清掉。
+
+---
+
 ## 🆕 Day 6 更新紀錄（2026-06-27）
 
 > **Day 6 = 臨床治理強化 + 精準度/體驗優化。** 全程實測了多輪完整閉環。
@@ -112,19 +139,41 @@
 
 > 換 **床 12 Encik Lim Ah Kow（對 penicillin 過敏）**。
 
-**🎙️ 口述腳本（床 12，過敏衝突案例）**
+**🎙️ 口述腳本（床 12，過敏衝突案例）— 2026-06-30 更新，涵蓋擬真強化 A/B/C/E**
 > "Encik Lim, post-op day two, looks like a wound infection.
-> Start Augmentin six twenty five milligrams three times a day for five days.
+> Start Augmentin six twenty five milligrams three times a day for five days, take with food.
 > Paracetamol one gram four times a day for pain.
+> Check capillary blood glucose four times a day; if it is very high or very low, escalate to me.
 > Nurse to monitor temperature every four hours."
 
 **操作**：錄音 → Upload & analyze → 看 Safety flags 卡 → 試著按 Confirm
 
 **應該看到 ✅**
 1. **Safety flags 卡變紅**，出現一條 **critical · allergy · Augmentin**：理由提到 penicillin 過敏交叉反應
-2. Confirm 區出現紅色 **「Override required (D-008)」** 勾選框 + 一句「I have reviewed and accept clinical responsibility…」
-3. **不勾就不能 dispatch**：Confirm 鈕是 disabled，下方有紅字提示
-4. 勾選後（可填 override 原因）→ Confirm 鈕亮起
+2. **（E）Augmentin 那一列出現 `Admin` 欄 = `with food`**（Gemini 抽到「take with food」；沒抽到可手動下拉選）
+3. Confirm 區出現紅色 **「Override required (D-008)」** 勾選框
+4. **不勾就不能 dispatch**：Confirm 鈕 disabled
+5. **（A 新規則）勾選後仍 disabled** —— 必須**填寫 override 原因**（框會標紅、下方紅字「Enter a reason…」）；**填了原因 Confirm 鈕才亮**。這是這一輪的重點改動：過敏覆蓋沒寫原因不准派發。
+
+> **（B 預期）** 「monitor temperature every four hours」是常規生命徵象 + 常規頻率 → **不會**多生一張獨立 temperature task（路由表 q4h 已涵蓋）。「check blood glucose」是非常規觀測 → 會進 **Special instructions** + 一張可填值的 glucose obs task。
+
+---
+
+## 4b.（新）自動升級 escalation ✦ 擬真強化 C
+
+> 承 §4：dispatch 床 12 那份 note（記得先填 override 原因）。然後到 `/nurse` 床 12。
+
+**操作（護士端）**
+1. **（A 閉環）** MAR 的 **Augmentin 列紅色徽章**：除了「為什麼危險」，現在還附上**醫生的 override 原因**（`Doctor's override reason: …`）。
+2. **（E）** Augmentin MAR 列標籤含 **`· with food`**。
+3. **（C 測 escalate）** 在路由表把任一格 **血壓填 200/120**（或在 glucose obs task 填 **2.5**）→ Submit。
+
+**應該看到 ✅**
+- toast「Abnormal value recorded」，該格變紅。
+- 切到 `/doctor` 頂部 **alert inbox** 自動出現一條：**「Auto-Monitor · escalated — Critical Blood pressure 200/120 mmHg — auto-escalated」**（glucose 2.5 則是「Critical Blood glucose 2.5 …」）。
+- **對照**：填**輕度異常**（如 BP 150/95、glucose 12）→ 只變紅、**不**進 inbox（避免 alert fatigue）。
+
+> critical 帶：血糖 `<3 / >20`、SBP `>180 / <80`、SpO₂ `<90`、temp `>39.5` … escalation 依**系統 critical 帶**觸發，不解析口述的自訂門檻（口述「very high/low」只當 Special Instruction 顯示文字）。
 
 ---
 

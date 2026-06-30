@@ -43,7 +43,11 @@ export function ConfirmButton({
   const [result, setResult] = useState<{ taskCount: number } | null>(null);
 
   const hasCritical = criticalFlags.length > 0;
-  const blocked = hasCritical && !acknowledged;
+  // A critical (allergy) flag is a hard safety stop: dispatch stays blocked until the
+  // doctor both acknowledges AND documents a reason (Workstream A). The server
+  // re-enforces this; the reason is logged and shown to the nurse on the MAR badge.
+  const needsReason = hasCritical && acknowledged && !reason.trim();
+  const blocked = hasCritical && (!acknowledged || !reason.trim());
 
   async function dispatch() {
     setSubmitting(true);
@@ -128,8 +132,11 @@ export function ConfirmButton({
               <Input
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Reason for override (optional, logged)"
-                className="mt-1 bg-white"
+                placeholder="Reason for override (required, shown to nurse)"
+                className={cn(
+                  "mt-1 bg-white",
+                  needsReason && "border-red-400 focus-visible:ring-red-400",
+                )}
                 onClick={(e) => e.preventDefault()}
               />
             )}
@@ -151,7 +158,9 @@ export function ConfirmButton({
       </Button>
       {blocked && (
         <p className="text-center text-xs text-red-500">
-          Acknowledge the safety override above to enable dispatch.
+          {needsReason
+            ? "Enter a reason for the override to enable dispatch."
+            : "Acknowledge the safety override above to enable dispatch."}
         </p>
       )}
     </div>

@@ -50,6 +50,8 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
 
   // Free-text description (observation / procedure / other).
   const [description, setDescription] = useState("");
+  // Optional clinical rationale shown to the attending on the approval card.
+  const [rationale, setRationale] = useState("");
   // Structured medication fields (medication type).
   const [drug, setDrug] = useState("");
   const [doseValue, setDoseValue] = useState("");
@@ -74,6 +76,7 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
 
   function reset() {
     setDescription("");
+    setRationale("");
     setDrug("");
     setDoseValue("");
     setDoseUnit("mg");
@@ -90,6 +93,7 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
         description: composed,
         taskType,
         priority,
+        rationale,
       });
       if (!res.ok) throw new Error(res.error ?? "Could not propose order.");
       toast({
@@ -247,6 +251,15 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
             />
           </div>
         )}
+
+        <div>
+          <FieldLabel>Reason / clinical rationale (optional)</FieldLabel>
+          <Input
+            value={rationale}
+            onChange={(e) => setRationale(e.target.value)}
+            placeholder="e.g. BP trending up despite current regime"
+          />
+        </div>
 
         {isMed && composed && (
           <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">

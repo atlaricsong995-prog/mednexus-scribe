@@ -23,6 +23,7 @@ export async function proposeOrder(input: {
   description: string;
   taskType?: string;
   priority?: string;
+  rationale?: string;
 }): Promise<ProposeResult> {
   const role = getRole();
   if (role !== "mo") {
@@ -31,6 +32,9 @@ export async function proposeOrder(input: {
   const description = input.description?.trim();
   if (!input.patientId) return { ok: false, error: "Missing patient." };
   if (!description) return { ok: false, error: "Describe the proposed order." };
+  // Optional clinical rationale (Workstream D) — shown to the attending on the
+  // approval card so they can judge the proposal quickly. Not mandatory.
+  const rationale = input.rationale?.trim() || null;
 
   const taskType: TaskType = TASK_TYPES.includes(input.taskType as TaskType)
     ? (input.taskType as TaskType)
@@ -50,6 +54,9 @@ export async function proposeOrder(input: {
     description,
     proposed_by_mo: true,
     priority,
+    // Rationale rides completion_notes (no schema change) — the approval card already
+    // renders it; surfaced to the attending as the resident's "why".
+    completion_notes: rationale,
     // Enters the attending's approval queue directly — no completion value yet.
     status: "submitted",
     submitted_at: new Date().toISOString(),
@@ -64,7 +71,12 @@ export async function proposeOrder(input: {
     action: "propose_order",
     entity_type: "patient",
     entity_id: input.patientId,
-    metadata: { patient_id: input.patientId, description, task_type: taskType },
+    metadata: {
+      patient_id: input.patientId,
+      description,
+      task_type: taskType,
+      rationale,
+    },
   });
 
   return { ok: true };

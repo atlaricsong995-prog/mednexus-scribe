@@ -132,8 +132,17 @@ export function ApprovalsPanel({
             ) : (
               ""
             )}
-            {t.completion_notes ? ` · ${t.completion_notes}` : ""}
+            {t.completion_notes && !t.proposed_by_mo
+              ? ` · ${t.completion_notes}`
+              : ""}
           </p>
+          {/* Resident's rationale (Workstream D) — their "why", to speed the
+              attending's approve/reject decision. */}
+          {t.proposed_by_mo && t.completion_notes && (
+            <p className="mt-0.5 text-xs text-sky-700">
+              Rationale: {t.completion_notes}
+            </p>
+          )}
           {/* Abnormal value the nurse flagged — let the doctor act on it (not just
               acknowledge) by jumping straight to dictating a new order (問題 3d). */}
           {t.abnormal && p && (

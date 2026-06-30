@@ -18,6 +18,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_DOCTOR_ID } from "@/lib/constants";
 import { checkMedicationSafety } from "@/lib/safety";
 import { medKey, todayMedSlots } from "@/lib/clinical/vocab";
+import { isRoutineCovered } from "@/lib/clinical/obs-routing";
 import { ExtractSchema } from "@/lib/ai/schemas";
 import type {
   Medication,
@@ -83,6 +84,11 @@ function medicationDescription(m: Medication): string {
   if (duration && !/^(as charted|stat|n\/?a|-)$/i.test(duration)) {
     desc += ` × ${duration}`;
   }
+  // Advisory administration instruction (Workstream E) — folded into the MAR row
+  // label so the nurse sees "with food" / "empty stomach" at give-time. Advisory
+  // only; it does not change the give-time slots.
+  const admin = m.admin_instruction?.trim();
+  if (admin) desc += ` · ${admin}`;
   return desc || m.drug;
 }
 
@@ -177,15 +183,18 @@ export async function POST(req: Request) {
   );
   const safetyFlags = [...recomputed, ...keptClientFlags];
 
-  // D-008 gate — refuse dispatch on an un-acknowledged critical flag.
+  // D-008 gate — refuse dispatch on a critical flag unless the doctor both
+  // acknowledges AND documents a reason (Workstream A — the reason is mandatory, not
+  // optional, and is surfaced to the nurse on the MAR badge below).
   const criticalFlags = safetyFlags.filter((f) => f.severity === "critical");
   const overridden = body.override?.acknowledged === true;
-  if (criticalFlags.length > 0 && !overridden) {
+  const overrideReason = body.override?.reason?.trim() || null;
+  if (criticalFlags.length > 0 && (!overridden || !overrideReason)) {
     return NextResponse.json(
       {
         error: "SAFETY_OVERRIDE_REQUIRED",
         message:
-          "This note has a critical safety flag. The doctor must acknowledge and override before dispatch.",
+          "This note has a critical safety flag. The doctor must acknowledge and document a reason before dispatch.",
         criticalFlags,
       },
       { status: 409 },
@@ -271,13 +280,27 @@ export async function POST(req: Request) {
       med_key: key,
       scheduled_for: scheduledFor,
       conditions: null,
-      // Critical-flagged drug dispatched under doctor override → nurse alert.
-      safety_alert: flag ? flag.reason : null,
+      // Critical-flagged drug dispatched under doctor override → nurse alert. Carries
+      // BOTH why the drug is dangerous (flag.reason) AND the doctor's documented
+      // override reason (Workstream A), so the nurse sees the rationale, not a silent
+      // red flag.
+      safety_alert: flag
+        ? overrideReason
+          ? `${flag.reason} — Doctor's override reason: ${overrideReason}`
+          : flag.reason
+        : null,
       priority: flag ? ("high" as const) : ("normal" as const),
     }));
   });
 
-  const nurseRows = nurseTasks.map((t) => {
+  // Observation routing (Workstream B): drop tasks that are just a routine grid vital
+  // on its routine cadence — the timetable already charts those, so a separate
+  // worklist task is redundant. Conditional / event-timed vitals and non-routine
+  // observations (glucose) still materialise. The note's authored nurse_tasks list is
+  // untouched — this only affects which task rows get created.
+  const materialisedNurseTasks = nurseTasks.filter((t) => !isRoutineCovered(t));
+
+  const nurseRows = materialisedNurseTasks.map((t) => {
     const { scheduledFor, label } = parseWhen(t.when);
     const description = label ? `${t.task} (${label})` : t.task;
     return {
@@ -337,7 +360,7 @@ export async function POST(req: Request) {
       safety_flag_count: safetyFlags.length,
       critical_flag_count: criticalFlags.length,
       safety_override: criticalFlags.length > 0 ? overridden : false,
-      override_reason: criticalFlags.length > 0 ? body.override?.reason ?? null : null,
+      override_reason: criticalFlags.length > 0 ? overrideReason : null,
     },
   });
 

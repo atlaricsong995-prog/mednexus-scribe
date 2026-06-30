@@ -25,6 +25,9 @@ export interface Medication {
   route: string;
   frequency: string;
   duration: string;
+  // Advisory administration instruction (food timing / caution), shown to the nurse
+  // on the MAR. Optional; does not affect scheduling. (Workstream E)
+  admin_instruction?: string | null;
 }
 
 export interface NurseTask {

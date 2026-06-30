@@ -32,6 +32,7 @@ import {
   ROUTE_OPTIONS,
   FREQ_OPTIONS,
   DOSE_UNITS,
+  ADMIN_INSTRUCTION_OPTIONS,
   parseDose,
 } from "@/lib/clinical/vocab";
 import type {
@@ -472,6 +473,29 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
                       onChange={(e) => updateMed(i, "duration", e.target.value)}
                       className="bg-white"
                     />
+                  </div>
+                  {/* Admin instruction (Workstream E) — advisory food-timing /
+                      caution, shown to the nurse on the MAR. Optional. */}
+                  <div className="col-span-2 sm:col-span-1">
+                    <FieldLabel>Admin</FieldLabel>
+                    <select
+                      value={m.admin_instruction ?? ""}
+                      onChange={(e) =>
+                        updateMed(i, "admin_instruction", e.target.value)
+                      }
+                      className="h-9 w-full rounded-md border border-input bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      aria-label="Administration instruction"
+                    >
+                      <option value="">—</option>
+                      {optionsWith(
+                        ADMIN_INSTRUCTION_OPTIONS,
+                        m.admin_instruction ?? "",
+                      ).map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

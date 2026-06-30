@@ -13,6 +13,8 @@ export const MedicationSchema = z.object({
   route: z.string(),
   frequency: z.string(),
   duration: z.string(),
+  // Advisory food-timing / caution (Workstream E). Optional — null when not dictated.
+  admin_instruction: z.string().nullable().optional(),
 });
 
 export const NurseTaskSchema = z.object({

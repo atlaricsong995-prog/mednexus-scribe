@@ -41,6 +41,18 @@ export type Freq = (typeof FREQ_OPTIONS)[number];
 export const DOSE_UNITS = ["mg", "g", "mcg", "mL", "units"] as const;
 export type DoseUnit = (typeof DOSE_UNITS)[number];
 
+// Advisory administration instructions (Workstream E) — food timing / cautions the
+// nurse needs at give-time. Controlled set for the prescribing UI + Gemini; advisory
+// only (does NOT change MAR scheduling).
+export const ADMIN_INSTRUCTION_OPTIONS = [
+  "before food",
+  "with food",
+  "after food",
+  "empty stomach",
+  "at night",
+] as const;
+export type AdminInstruction = (typeof ADMIN_INSTRUCTION_OPTIONS)[number];
+
 // Frequency token -> administrations per day. PRN has no fixed count (null =
 // skip dose-ceiling math). Includes a few legacy aliases the LLM/transcript may
 // still produce so the safety checker stays robust.
@@ -115,7 +127,10 @@ interface ObsSingle {
   label: string;
   unit: string;
   kind: "single";
-  normal: [number, number]; // inclusive [low, high]
+  normal: [number, number]; // inclusive [low, high] — outside = abnormal (red)
+  // Wider outer bound — a value outside `critical` is dangerous and auto-escalates
+  // (Workstream C). Omit when no clinically meaningful critical band exists.
+  critical?: [number, number];
   step?: number;
   placeholder?: string;
 }
@@ -125,6 +140,9 @@ interface ObsBp {
   kind: "bp";
   systolic: [number, number];
   diastolic: [number, number];
+  // Outer bounds for systolic/diastolic — outside either = critical (auto-escalate).
+  criticalSystolic?: [number, number];
+  criticalDiastolic?: [number, number];
   placeholder?: string;
 }
 export type ObsSpec = ObsSingle | ObsBp;
@@ -138,6 +156,8 @@ export const OBSERVATION_CATALOG: Record<ObsType, ObsSpec> = {
     kind: "bp",
     systolic: [90, 140],
     diastolic: [60, 90],
+    criticalSystolic: [80, 180],
+    criticalDiastolic: [50, 110],
     placeholder: "120/80",
   },
   glucose: {
@@ -145,6 +165,7 @@ export const OBSERVATION_CATALOG: Record<ObsType, ObsSpec> = {
     unit: "mmol/L",
     kind: "single",
     normal: [4, 10],
+    critical: [3, 20],
     step: 0.1,
     placeholder: "6.2",
   },
@@ -153,6 +174,7 @@ export const OBSERVATION_CATALOG: Record<ObsType, ObsSpec> = {
     unit: "°C",
     kind: "single",
     normal: [36, 37.8],
+    critical: [35, 39.5],
     step: 0.1,
     placeholder: "37.0",
   },
@@ -161,6 +183,7 @@ export const OBSERVATION_CATALOG: Record<ObsType, ObsSpec> = {
     unit: "%",
     kind: "single",
     normal: [94, 100],
+    critical: [90, 100],
     step: 1,
     placeholder: "98",
   },
@@ -169,6 +192,7 @@ export const OBSERVATION_CATALOG: Record<ObsType, ObsSpec> = {
     unit: "bpm",
     kind: "single",
     normal: [60, 100],
+    critical: [40, 130],
     step: 1,
     placeholder: "78",
   },
@@ -177,6 +201,7 @@ export const OBSERVATION_CATALOG: Record<ObsType, ObsSpec> = {
     unit: "/min",
     kind: "single",
     normal: [12, 20],
+    critical: [8, 30],
     step: 1,
     placeholder: "16",
   },
@@ -336,4 +361,39 @@ export function isAbnormal(
   if (!m) return false;
   const n = parseFloat(m[0]);
   return n < spec.normal[0] || n > spec.normal[1];
+}
+
+export type ObsSeverity = "normal" | "abnormal" | "critical";
+
+// Two-band classification of a recorded value (Workstream C). `normal` = in range;
+// `abnormal` = outside the normal range (renders red, no alert); `critical` =
+// outside the wider critical band (auto-escalates). Returns "normal" for unknown
+// types / unparseable values, and never "critical" when no critical band is set.
+export function obsSeverity(
+  type: ObsType | string | null | undefined,
+  value: string | null | undefined,
+): ObsSeverity {
+  if (!isObsType(type) || !value) return "normal";
+  if (!isAbnormal(type, value)) return "normal";
+  const spec = OBSERVATION_CATALOG[type];
+
+  if (spec.kind === "bp") {
+    const m = value.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+    if (!m) return "abnormal";
+    const sys = parseFloat(m[1]);
+    const dia = parseFloat(m[2]);
+    const critSys =
+      spec.criticalSystolic &&
+      (sys < spec.criticalSystolic[0] || sys > spec.criticalSystolic[1]);
+    const critDia =
+      spec.criticalDiastolic &&
+      (dia < spec.criticalDiastolic[0] || dia > spec.criticalDiastolic[1]);
+    return critSys || critDia ? "critical" : "abnormal";
+  }
+
+  if (!spec.critical) return "abnormal";
+  const m = value.match(/-?\d+(?:\.\d+)?/);
+  if (!m) return "abnormal";
+  const n = parseFloat(m[0]);
+  return n < spec.critical[0] || n > spec.critical[1] ? "critical" : "abnormal";
 }

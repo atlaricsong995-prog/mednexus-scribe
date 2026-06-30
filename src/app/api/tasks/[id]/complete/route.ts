@@ -7,7 +7,12 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRole } from "@/lib/server/role";
 import { DEMO_NURSE_ID, DEMO_NURSE_NAME } from "@/lib/constants";
-import { isAbnormal } from "@/lib/clinical/vocab";
+import {
+  isAbnormal,
+  isObsType,
+  obsSeverity,
+  OBSERVATION_CATALOG,
+} from "@/lib/clinical/vocab";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +59,10 @@ export async function PATCH(
   // Range-check observation values against OBSERVATION_CATALOG (server-authoritative
   // — don't trust a client-sent flag). Abnormal vitals render red on the boards.
   const abnormal = isAbnormal(task.obs_type, value);
+  // Two-band severity (Workstream C): a value inside the critical band auto-escalates
+  // to the attending (see the escalation insert below). Computed server-side so the
+  // alert can always be justified from the recorded value.
+  const severity = obsSeverity(task.obs_type, value);
 
   // Charted-not-approved cells record straight to 'approved' so they never clutter
   // the attending's approval queue: routine vitals (Enh Day 3) and MAR drug
@@ -102,6 +111,33 @@ export async function PATCH(
       completed_by_name: updated.completed_by_name,
     },
   });
+
+  // Auto-escalation (Workstream C): a critical-band value notifies the attending
+  // via the same audit_log 'escalation' channel the manual Escalate button uses, so
+  // it lands in the /doctor inbox in realtime. Severity routing (not time-of-day) —
+  // any critical value reaches the attending. Mildly-abnormal values do NOT escalate.
+  if (severity === "critical") {
+    const label =
+      (isObsType(updated.obs_type) &&
+        OBSERVATION_CATALOG[updated.obs_type].label) ||
+      "Observation";
+    await supabase.from("audit_log").insert({
+      actor_id: DEMO_NURSE_ID,
+      actor_role: "system",
+      action: "escalation",
+      entity_type: "patient",
+      entity_id: updated.patient_id,
+      metadata: {
+        patient_id: updated.patient_id,
+        role: "auto-monitor",
+        message: `Critical ${label} ${updated.completion_value} — auto-escalated`,
+        obs_type: updated.obs_type,
+        value: updated.completion_value,
+        severity: "critical",
+        task_id: taskId,
+      },
+    });
+  }
 
   return NextResponse.json({ task: updated });
 }

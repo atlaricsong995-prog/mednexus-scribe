@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ResetDemoButton } from "@/components/reset-demo-button";
 import type { Role } from "@/lib/supabase/types";
 
 type RoleOption = {
@@ -25,7 +26,7 @@ const ROLES: RoleOption[] = [
   {
     role: "doctor",
     label: "Doctor",
-    who: "主治醫生",
+    who: "Attending Physician",
     blurb: "Ward round, dictate notes, confirm orders.",
     route: "/doctor",
     icon: Stethoscope,
@@ -33,7 +34,7 @@ const ROLES: RoleOption[] = [
   {
     role: "mo",
     label: "Medical Officer",
-    who: "駐院醫生",
+    who: "Resident",
     blurb: "Read timetable, propose orders, escalate to attending.",
     route: "/mo",
     icon: UserCog,
@@ -41,7 +42,7 @@ const ROLES: RoleOption[] = [
   {
     role: "nurse",
     label: "Nurse",
-    who: "護士",
+    who: "Ward Nurse",
     blurb: "Receive dispatched tasks, complete & report.",
     route: "/nurse",
     icon: Syringe,
@@ -49,7 +50,7 @@ const ROLES: RoleOption[] = [
   {
     role: "head_nurse",
     label: "Head Nurse",
-    who: "護士長",
+    who: "Charge Nurse",
     blurb: "Control tower — live ward overview (read-only).",
     route: "/control-tower",
     icon: LayoutDashboard,
@@ -121,6 +122,10 @@ export default function LandingPage() {
           ))}
         </div>
       </section>
+
+      <div className="mt-10">
+        <ResetDemoButton />
+      </div>
 
       <footer className="mt-12 text-center text-xs text-slate-400">
         Demo build · roles bypass real authentication for the judging walkthrough.

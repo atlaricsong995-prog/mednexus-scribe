@@ -30,7 +30,7 @@ export default async function ControlTowerPage({
           </span>
           <div>
             <p className="text-xs font-medium uppercase tracking-widest text-slate-400">
-              Head Nurse · 護士長
+              Head Nurse · Charge Nurse
             </p>
             <h1 className="text-2xl font-bold text-slate-900">Control Tower</h1>
             <p className="text-sm text-slate-500">

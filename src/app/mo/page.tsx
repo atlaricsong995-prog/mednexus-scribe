@@ -3,9 +3,11 @@ import { UserCog } from "lucide-react";
 
 import { PatientWindow } from "@/components/patient-window";
 import { WardWorklist } from "@/components/ward-worklist";
+import { DoctorAlerts } from "@/components/doctor-alerts";
 import { getRole } from "@/lib/server/role";
 import { getWardData } from "@/lib/server/ward-data";
 import { getPatientWindowData } from "@/lib/server/patient-window-data";
+import { getRecentAlerts } from "@/lib/server/alerts-data";
 import { WARD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +22,14 @@ export default async function MoPage({
   searchParams: { bed?: string };
 }) {
   const role = getRole();
-  const { patients, tasks } = await getWardData(WARD);
   const bed = searchParams.bed ?? null;
+
+  // Ward data + the escalation/break-glass inbox backfill. Critical-vital
+  // auto-escalations reach the MO (first responder) here as well as the attending.
+  const [{ patients, tasks }, initialAlerts] = await Promise.all([
+    getWardData(WARD),
+    getRecentAlerts(),
+  ]);
 
   const data = bed ? await getPatientWindowData(WARD, bed, role) : null;
 
@@ -34,7 +42,7 @@ export default async function MoPage({
           </span>
           <div>
             <p className="text-xs font-medium uppercase tracking-widest text-slate-400">
-              Medical Officer · 駐院醫生
+              Medical Officer · Resident
             </p>
             <h1 className="text-2xl font-bold text-slate-900">My Patients</h1>
             <p className="text-sm text-slate-500">
@@ -49,6 +57,8 @@ export default async function MoPage({
           ← Switch role
         </Link>
       </header>
+
+      <DoctorAlerts patients={patients} initialAlerts={initialAlerts} />
 
       <WardWorklist
         ward={WARD}

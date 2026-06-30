@@ -12,6 +12,10 @@ export const DEMO_HEAD_NURSE_ID = "00000000-0000-0000-0000-000000000003";
 // the cookie-role nurse charts as this fixed name, stamped automatically.
 export const DEMO_NURSE_NAME = "Nurse Siti";
 
+// The attending physician (主治醫生) — shown by name in the head-nurse live feed so
+// events read "Attending approved …" rather than a generic "Doctor approved".
+export const DEMO_DOCTOR_NAME = "Attending";
+
 export const AUDIO_BUCKET = "audio-recordings";
 
 // AI model ids (single source of truth — Tech Spec §4, D-009).

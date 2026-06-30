@@ -13,6 +13,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useRealtimeTasks } from "@/hooks/use-realtime";
+import { DEMO_DOCTOR_NAME, DEMO_NURSE_NAME } from "@/lib/constants";
 import type { Task } from "@/lib/supabase/types";
 import {
   bedStatusColor,
@@ -48,17 +49,18 @@ function seedEntry(task: Task, patientMap: Map<string, PatientLite>): FeedEntry 
   const p = patientMap.get(task.patient_id);
   const bed = p ? ` · Bed ${p.bed_number}` : "";
   let tone: FeedEntry["tone"] = "dispatch";
-  let verb = "Dispatched";
+  let verb = `${DEMO_DOCTOR_NAME} dispatched`;
   let when = task.created_at;
   if (task.status === "approved") {
     tone = "approve";
-    verb = "Doctor approved";
+    verb = `${DEMO_DOCTOR_NAME} approved`;
     when = task.approved_at ?? task.created_at;
   } else if (task.status === "submitted") {
     tone = "submit";
-    verb = `Nurse submitted${task.completion_value ? ` (${task.completion_value})` : ""}${
-      task.abnormal ? " ⚠ ABNORMAL" : ""
-    }`;
+    // Name the charting nurse (stamped on submit) instead of a generic "Nurse".
+    verb = `${task.completed_by_name ?? DEMO_NURSE_NAME} submitted${
+      task.completion_value ? ` (${task.completion_value})` : ""
+    }${task.abnormal ? " ⚠ ABNORMAL" : ""}`;
     when = task.submitted_at ?? task.created_at;
   }
   return {
@@ -125,7 +127,7 @@ export function WardWorklist({
     initialTasks,
     onInsert: (task) => {
       if (!showActivity || isGridCell(task)) return;
-      pushFeed(task, "dispatch", "Dispatched");
+      pushFeed(task, "dispatch", `${DEMO_DOCTOR_NAME} dispatched`);
     },
     onUpdate: (task) => {
       if (!showActivity || isGridCell(task)) return;
@@ -133,11 +135,12 @@ export function WardWorklist({
         pushFeed(
           task,
           "submit",
-          `Nurse submitted${task.completion_value ? ` (${task.completion_value})` : ""}${
-            task.abnormal ? " ⚠ ABNORMAL" : ""
-          }`,
+          `${task.completed_by_name ?? DEMO_NURSE_NAME} submitted${
+            task.completion_value ? ` (${task.completion_value})` : ""
+          }${task.abnormal ? " ⚠ ABNORMAL" : ""}`,
         );
-      else if (task.status === "approved") pushFeed(task, "approve", "Doctor approved");
+      else if (task.status === "approved")
+        pushFeed(task, "approve", `${DEMO_DOCTOR_NAME} approved`);
     },
   });
 
@@ -214,8 +217,16 @@ export function WardWorklist({
               return (
                 <Link
                   key={p.id}
-                  href={`${basePath}?bed=${encodeURIComponent(p.bed_number)}`}
+                  // Toggle: tapping the open patient again clears the selection and
+                  // returns the head nurse to the live feed (and collapses the
+                  // detail pane for nurse/MO).
+                  href={
+                    sel
+                      ? basePath
+                      : `${basePath}?bed=${encodeURIComponent(p.bed_number)}`
+                  }
                   prefetch={false}
+                  scroll={false}
                   className={cn(
                     "flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all hover:shadow-sm",
                     sel

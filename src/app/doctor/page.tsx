@@ -36,7 +36,7 @@ export default async function DoctorPage() {
           </span>
           <div>
             <p className="text-xs font-medium uppercase tracking-widest text-slate-400">
-              Doctor · 主治醫生
+              Doctor · Attending Physician
             </p>
             <h1 className="text-2xl font-bold text-slate-900">
               Today&apos;s Ward Round

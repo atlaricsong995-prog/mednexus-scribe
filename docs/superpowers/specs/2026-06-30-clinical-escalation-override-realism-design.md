@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Status:** Design approved, pending spec review
-**Scope:** Four logic fixes surfaced while testing *MVP Full Test Script* Script A. Realism polish on top of the round-3 nurse-view work. No new subsystems.
+**Scope:** Six logic fixes surfaced while testing *MVP Full Test Script* Script A. Realism polish on top of the round-3 nurse-view work. No new subsystems.
 
 ## Problem
 
@@ -12,6 +12,8 @@ Testing exposed four clinical-logic gaps:
 2. **Allergy override needs no justification.** A doctor can prescribe a drug the patient is allergic to, tick the override box, and dispatch with **no reason** — so the nurse sees a flagged drug with no rationale and just proceeds.
 3. **Glucose modelled as if routine.** Blood glucose is patient-/medication-specific (e.g. fasting, post-insulin), not a fixed q4h vital. It belongs in Special Instructions with an explicit threshold, not in the universal grid.
 4. **BP over-specified.** BP is already a routine grid vital, so the extractor should not manufacture a separate heavyweight BP task — unless there is special timing/condition (e.g. "BP 1h post-antihypertensive"), which is a Special Instruction.
+5. **MO proposals carry no rationale.** A resident proposes an order with no "why", so the attending approves blind. (Multiple orders are already supported via sequential submits.)
+6. **No administration instructions.** Medications have no field for food timing / cautions ("with food", "empty stomach"), so the nurse loses clinically important guidance.
 
 ## Guiding taxonomy (the unifying decision)
 
@@ -92,16 +94,52 @@ Represented consistently with the existing structure: `critical?: [number,number
 
 ---
 
+## Workstream D — MO proposal rationale (point 5)
+
+**Current state.** `ProposeOrderPanel` proposes one order at a time (structured medication fields, or free-text observation/procedure/other). It already supports multiple orders by submitting repeatedly — each becomes an independent `submitted` task in the attending's queue, individually approvable. There is **no rationale field**; the attending sees only the order line.
+
+**Decision: keep one-at-a-time** (no batch-in-one-submit). Batch submission would force all-or-nothing approve/reject and require reworking the approve route for marginal benefit; sequential proposals are cleaner. Optionally add a UI hint that multiple orders can be submitted in turn.
+
+**Change: add an optional rationale.**
+- `propose-order-panel.tsx`: add an optional *"Reason / clinical rationale"* free-text field.
+- `mo/actions.ts` (`proposeOrder`): accept `rationale`, persist it (on the task — `completion_notes` or a dedicated field — and in the `propose_order` audit_log metadata).
+- Attending approval card surfaces the rationale so they can judge quickly.
+- **Not mandatory** — unlike the allergy override (a hard safety stop, Workstream A), a proposal is advisory; don't gate every proposal on a typed reason.
+
+**Touch points.**
+- `src/components/propose-order-panel.tsx`, `src/app/mo/actions.ts`, the attending approvals card (`note-review-panel.tsx` / approvals panel).
+
+---
+
+## Workstream E — Medication administration instructions (point 6)
+
+**Current state.** `medSlotHours(frequency)` auto-maps a frequency to fixed clock slots (e.g. `tds → 08/14/22`) — a sensible default MAR, **kept as-is**. The `Medication` interface (`drug/dose/route/frequency/duration`) has **no field** for food timing or cautions, so "give with food", "before food", "empty stomach" is lost.
+
+**Change: add an advisory administration-instruction annotation.**
+- Extend `Medication` with an optional `admin_instruction` (controlled set — `before food` / `with food` / `after food` / `empty stomach` / `other` — plus optional free text). `clinical_notes.medications` is jsonb, so **no migration**.
+- Gemini extraction populates it when dictated (prompt addition); the prescribing UI exposes it as an optional field per drug.
+- Rendered on the **MAR cell / drug row** so the nurse sees it at administration time.
+- **Advisory only — does NOT change scheduling.** "With food" does not re-time the clock slots; the annotation is information for the nurse, not a re-scheduling input. Keeps the slot architecture untouched.
+
+**Touch points.**
+- `src/lib/supabase/types.ts` (`Medication`), `src/lib/ai/schemas.ts` + `src/lib/ai/gemini.ts` (extraction), the prescribing UI (`note-review-panel.tsx`), and the MAR (`medication-timetable.tsx` / `med-administer-dialog.tsx`).
+
+---
+
 ## Out of scope (YAGNI)
 
 - Time-of-day escalation routing (night→MO, day→attending). Considered and rejected: clock-dependent branches are fragile to demo and add little over severity routing.
 - A scheduler / future-day routine or glucose grid rows.
 - Escalation acknowledgement workflow (attending marking an alert handled). The inbox surfacing is enough for the demo loop.
 - Changing the LLM extraction prompt for routing — classification is deterministic and post-extraction.
+- Batch MO proposals (multiple orders in one submit). Sequential one-at-a-time is retained (Workstream D).
+- Food-timing-driven re-scheduling of MAR slots. The admin instruction is advisory only (Workstream E).
 
 ## Success criteria
 
 1. Dispatching a note with a critical allergy flag is **impossible** until a non-empty override reason is entered; that reason appears on the nurse's MAR badge.
 2. A dictated "check BG QDS, escalate if <4 or >15" surfaces as a **Special Instruction** with threshold, plus a chartable glucose obs task; a dictated plain "monitor BP" produces **no** extra task (grid covers it); a dictated "BP 1h post-dose" surfaces as a Special Instruction.
 3. Charting a glucose of `2.5` (or a routine BP of `200/120`) auto-writes an `escalation` row that appears in the attending `/doctor` inbox in realtime; charting a mildly-abnormal value turns red but does **not** escalate.
-4. `tsc --noEmit` and lint clean; no schema migration required beyond reuse of existing columns/`audit_log`.
+4. An MO can attach an optional rationale to a proposed order; it appears on the attending's approval card. Proposals without a rationale still submit.
+5. A dictated drug with "give with food" carries an `admin_instruction` annotation visible on the MAR; clock slots are unchanged by the annotation.
+6. `tsc --noEmit` and lint clean; no schema migration required beyond reuse of existing columns/`audit_log` (medications jsonb absorbs `admin_instruction`).

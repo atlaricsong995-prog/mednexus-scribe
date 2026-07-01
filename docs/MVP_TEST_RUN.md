@@ -5,6 +5,24 @@
 
 ---
 
+## 🆕 UX 修正第二輪（2026-07-01）— 念錯床切換 + 給藥後自動追蹤
+
+> **這一輪 = 測 Script A 時用戶回報的兩個問題。狀態：完成、tsc + lint 乾淨、live 驗證 13/13、已 commit（`e05dcdd`）、待 push。無 migration。**
+
+**問題 1｜念錯床自動切換**：右病人不符時按「Move note to Bed X」原本只默默把草稿 note 的 `patient_id` 改掉，頁面頂部（病人卡/病歷/錄音器目標）仍停在錯的床 → 醫生看到「頭是 Bed 13、身體是 Bed 12」。
+- 修法：Move 成功 → **導航到 `/doctor/{正確床}?reviewNote={id}`**，草稿在正確床頁重開審閱，整頁一致。
+- 檔案：`retarget/route.ts`（回傳 `bedNumber`）、`note-review-panel.tsx`（`router.push`，保留舊 in-place banner 為 fallback）、`doctor/[bedId]/page.tsx` + `patient-window-data.ts` 新 `getDraftNoteReview`（雙重防呆：draft 狀態 + patient 相符才顯示）。
+
+**問題 2｜給藥後自動追蹤驗血糖（Level 2）**：降血糖藥（insulin / 磺醯脲類）現在會在**護士簽下 MAR 那一刻**、以**實際給藥時間 + 60 分**排一條 high 優先血糖追蹤 obs task（非 dispatch 時、非 LLM 口述）。
+- 新檔 `src/lib/clinical/post-dose.ts`（確定性藥物規則表；**Metformin 故意排除**——不會急性低血糖）。
+- Hook 在 `tasks/[id]/complete/route.ts`：med_key cell 簽核後查規則 → insert 追蹤 task（med_key/routine_key 皆 null → 走 ad-hoc worklist + realtime 到護士/控制塔）。每劑只生一次（cell pending→approved 僅一次）。
+- **Script A 已改**（vault `8. MVP Product/MVP Full Test Script.md`）：拿掉口述「1 小時後驗血糖」、改開 **Insulin Actrapid 10 units SC stat**；Metformin/Augmentin 保留（測 duplicate/過敏）。血糖任務改由「簽胰島素→自動追蹤」產生，接 §4 異常值閉環（填 18）。
+
+**✅ live 驗證（打 API + 查 DB，13/13）**：dispatch→Insulin MAR cell→護士簽→自動生 post-dose 血糖 task（high/pending/到期+60min/附理由）；**Augmentin 負向對照不生追蹤**；retarget 回傳 bedNumber=12 + note 搬床且維持 draft。驗證後已 `seed_baseline_records.ts` 還原、殘留=0。
+**⏳ 待人手 UI 走查**：錄音 → 切換床跳頁 → 護士簽胰島素看追蹤冒出 → 三端 realtime（只有人能看）。走查腳本見 Script A 的 §2-A / §3-B。
+
+---
+
 ## 🆕 臨床擬真強化更新（2026-06-30）
 
 > **這一輪 = 測 Script A 時發現的六個臨床邏輯修正。** 設計文件：`docs/superpowers/specs/2026-06-30-clinical-escalation-override-realism-design.md`。

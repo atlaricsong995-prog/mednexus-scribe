@@ -15,11 +15,20 @@ export interface AlertRow {
 
 export async function getRecentAlerts(limit = 20): Promise<AlertRow[]> {
   const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("audit_log")
-    .select("id, actor_role, action, entity_id, metadata, created_at")
-    .in("action", ["break_glass_view", "escalation"])
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  return (data as AlertRow[]) ?? [];
+  // Acknowledged alerts are append-only `alert_ack` rows that reference the original
+  // alert via entity_id. Pull the acked ids first so the backfill hides anything a
+  // doctor has already closed (the realtime channel handles acks that arrive later).
+  const [{ data }, { data: acks }] = await Promise.all([
+    supabase
+      .from("audit_log")
+      .select("id, actor_role, action, entity_id, metadata, created_at")
+      .in("action", ["break_glass_view", "escalation"])
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    supabase.from("audit_log").select("entity_id").eq("action", "alert_ack"),
+  ]);
+  const ackedIds = new Set(
+    (acks ?? []).map((a) => a.entity_id).filter((id): id is string => !!id),
+  );
+  return ((data as AlertRow[]) ?? []).filter((row) => !ackedIds.has(row.id));
 }

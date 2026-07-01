@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ShieldAlert, BellRing } from "lucide-react";
+import { ShieldAlert, BellRing, Check } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -60,6 +60,33 @@ export function DoctorAlerts({
   const [entries, setEntries] = useState<AlertEntry[]>(() =>
     initialAlerts.map(toEntry),
   );
+  // Ids currently being acknowledged — disables the button + avoids a double POST.
+  const [acking, setAcking] = useState<Set<string>>(() => new Set());
+
+  // Acknowledge an alert: append the ack server-side, then drop it locally. The
+  // realtime handler below clears it from every other open doctor/MO tab too.
+  async function acknowledge(id: string) {
+    setAcking((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/alerts/${id}/ack`, { method: "POST" });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: "" }));
+        toast({
+          variant: "destructive",
+          title: "Could not acknowledge",
+          description: error || "Please try again.",
+        });
+        return;
+      }
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+    } finally {
+      setAcking((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -70,6 +97,14 @@ export function DoctorAlerts({
         { event: "INSERT", schema: "public", table: "audit_log" },
         (payload) => {
           const row = payload.new as AlertRow;
+          // An acknowledgement elsewhere — remove the referenced alert from this tab.
+          if (row.action === "alert_ack") {
+            const ackedId = row.entity_id;
+            if (ackedId) {
+              setEntries((prev) => prev.filter((e) => e.id !== ackedId));
+            }
+            return;
+          }
           if (
             row.action !== "break_glass_view" &&
             row.action !== "escalation"
@@ -135,7 +170,7 @@ export function DoctorAlerts({
                   <BellRing className="h-3 w-3" />
                 )}
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-slate-800">
                   <span className="font-medium capitalize">{e.who}</span>
                   {" · "}
@@ -148,6 +183,15 @@ export function DoctorAlerts({
                   {e.at} — “{e.text}”
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => acknowledge(e.id)}
+                disabled={acking.has(e.id)}
+                className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <Check className="h-3 w-3" />
+                {acking.has(e.id) ? "…" : "Acknowledge"}
+              </button>
             </li>
           );
         })}

@@ -276,12 +276,12 @@ export async function resetBaseline(sb: AnyClient): Promise<ResetSummary> {
     newAdmission = true;
   }
 
-  // Clear the demo alert log (escalations + break-glass views) so the doctor/MO
-  // inboxes are empty on a fresh run.
+  // Clear the demo alert log (escalations + break-glass views, plus their
+  // acknowledgements) so the doctor/MO inboxes are empty on a fresh run.
   await sb
     .from("audit_log")
     .delete()
-    .in("action", ["escalation", "break_glass_view"]);
+    .in("action", ["escalation", "break_glass_view", "alert_ack"]);
 
   return { seeded, skipped, newAdmission };
 }

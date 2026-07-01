@@ -13,6 +13,7 @@ import {
   obsSeverity,
   OBSERVATION_CATALOG,
 } from "@/lib/clinical/vocab";
+import { getPostDoseMonitor } from "@/lib/clinical/post-dose";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -137,6 +138,56 @@ export async function PATCH(
         task_id: taskId,
       },
     });
+  }
+
+  // Post-dose monitoring (問題 2 — Level 2): when a MEDICATION cell is signed as
+  // given, some drugs mandate a timed follow-up observation (e.g. a capillary blood
+  // glucose ~1h after insulin / a sulfonylurea). We schedule it off the ACTUAL
+  // give-time (`now`), not dispatch time, so its due time reflects reality. This
+  // only fires for administered medications (med_key set) — an observation cell
+  // never spawns another. The MAR cell transitions pending → approved exactly once
+  // (status guard above), so the follow-up is created exactly once per dose.
+  if (updated.med_key) {
+    const monitor = getPostDoseMonitor(updated.description, updated.med_key);
+    if (monitor) {
+      const dueAt = new Date(
+        Date.parse(now) + monitor.delayMinutes * 60_000,
+      ).toISOString();
+      const { error: followErr } = await supabase.from("tasks").insert({
+        note_id: updated.note_id,
+        patient_id: updated.patient_id,
+        ward: updated.ward,
+        task_type: "observation",
+        description: monitor.label,
+        obs_type: monitor.obs_type,
+        routine_key: null,
+        med_key: null,
+        scheduled_for: dueAt,
+        conditions: monitor.reason,
+        safety_alert: null,
+        priority: "high",
+        status: "pending",
+      });
+      // Best-effort — the medication has already been charted; a follow-up insert
+      // failure must not roll that back. Record it either way for governance.
+      await supabase.from("audit_log").insert({
+        actor_id: DEMO_NURSE_ID,
+        actor_role: "system",
+        action: "post_dose_monitor",
+        entity_type: "task",
+        entity_id: taskId,
+        metadata: {
+          patient_id: updated.patient_id,
+          ward: updated.ward,
+          med_key: updated.med_key,
+          obs_type: monitor.obs_type,
+          due_at: dueAt,
+          delay_minutes: monitor.delayMinutes,
+          created: !followErr,
+          error: followErr?.message ?? null,
+        },
+      });
+    }
   }
 
   return NextResponse.json({ task: updated });

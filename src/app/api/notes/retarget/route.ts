@@ -87,6 +87,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     allergies: patient.allergies ?? [],
+    bedNumber: patient.bed_number,
     label: `Bed ${patient.bed_number} · ${patient.full_name} · ${patient.mrn}`,
   });
 }

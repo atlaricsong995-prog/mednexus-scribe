@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   FileText,
   Pill,
@@ -139,6 +140,7 @@ function flagMatchesMed(flag: SafetyFlag, med: Medication): boolean {
 // is present.
 export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [note, setNote] = useState<MedicalNote>(data.medical_note);
   const [meds, setMeds] = useState<Medication[]>(data.medications);
   const [tasks, setTasks] = useState<NurseTask[]>(data.nurse_tasks);
@@ -165,13 +167,25 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Could not move note.");
+      toast({
+        title: "Note moved",
+        description: `Re-targeted to ${d.label ?? "the correct patient"} — opening that chart.`,
+      });
+      // Navigate to the CORRECT bed so the whole page (header, patient window,
+      // recorder target) matches the note's new owner — the draft re-opens there
+      // for review via ?reviewNote. Leaving the doctor on the old bed's page with
+      // a silently re-pointed note was the confusing part (問題 1).
+      if (d.bedNumber) {
+        const params = new URLSearchParams({ reviewNote: data.noteId });
+        const from = check.openLabel?.split(" · ")[0];
+        if (from) params.set("from", from);
+        router.push(`/doctor/${encodeURIComponent(d.bedNumber)}?${params}`);
+        return;
+      }
+      // Fallback (no bed number) — keep the old in-place banner behaviour.
       setAllergies(d.allergies ?? []);
       setMovedTo(check.spokenLabel ?? d.label ?? "the correct patient");
       setCheck(null);
-      toast({
-        title: "Note moved",
-        description: `Re-targeted to ${d.label ?? "the correct patient"}; safety re-checked.`,
-      });
     } catch (err) {
       toast({
         variant: "destructive",

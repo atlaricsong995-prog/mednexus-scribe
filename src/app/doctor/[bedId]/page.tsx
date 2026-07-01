@@ -1,21 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, FolderOpen } from "lucide-react";
+import { ChevronLeft, FolderOpen, UserCheck } from "lucide-react";
 
 import { PatientSummary } from "@/components/patient-summary";
 import { PatientWindow } from "@/components/patient-window";
 import { PatientWindowModal } from "@/components/patient-window-modal";
+import { NoteReviewPanel } from "@/components/note-review-panel";
 import { Recorder } from "@/components/recorder";
 import { getRole } from "@/lib/server/role";
-import { getPatientWindowData } from "@/lib/server/patient-window-data";
+import {
+  getPatientWindowData,
+  getDraftNoteReview,
+} from "@/lib/server/patient-window-data";
 import { WARD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
 export default async function PatientDetailPage({
   params,
+  searchParams,
 }: {
   params: { bedId: string };
+  searchParams: { reviewNote?: string; from?: string };
 }) {
   const role = getRole();
   const data = await getPatientWindowData(
@@ -26,6 +32,16 @@ export default async function PatientDetailPage({
   if (!data) notFound();
 
   const { patient } = data;
+
+  // A note re-targeted to this patient (問題 1) re-opens here for review instead of
+  // the live recorder — the header/window above now correctly read this bed.
+  const reviewNote = searchParams.reviewNote
+    ? await getDraftNoteReview(
+        searchParams.reviewNote,
+        patient.id,
+        patient.allergies ?? [],
+      )
+    : null;
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-8">
@@ -68,12 +84,27 @@ export default async function PatientDetailPage({
           />
         </PatientWindowModal>
 
-        <section>
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
-            Dictate note
-          </h2>
-          <Recorder patientId={patient.id} />
-        </section>
+        {reviewNote ? (
+          <section>
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              <UserCheck className="h-4 w-4 shrink-0" />
+              <span>
+                Note moved here
+                {searchParams.from ? ` from ${searchParams.from}` : ""} — you are
+                now on {patient.full_name} · Bed {patient.bed_number}. Review and
+                confirm.
+              </span>
+            </div>
+            <NoteReviewPanel data={reviewNote} />
+          </section>
+        ) : (
+          <section>
+            <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
+              Dictate note
+            </h2>
+            <Recorder patientId={patient.id} />
+          </section>
+        )}
       </div>
     </main>
   );

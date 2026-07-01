@@ -9,8 +9,11 @@ import {
   getTodayMedTasks,
 } from "@/lib/server/routine";
 import { canViewRecord } from "@/lib/server/role";
+import { checkMedicationSafety } from "@/lib/safety";
+import type { NoteReviewData } from "@/components/note-review-panel";
 import type {
   ClinicalNote,
+  Medication,
   NurseTask,
   Patient,
   Role,
@@ -89,6 +92,43 @@ async function getAdHocTasks(patientId: string): Promise<Task[]> {
     .is("med_key", null)
     .order("created_at", { ascending: false });
   return (data as Task[]) ?? [];
+}
+
+// Rebuild the review payload for a still-DRAFT note so it can re-open on a
+// different bed's page (問題 1 — after a right-patient re-target the doctor lands
+// on the correct chart with the note ready to confirm). Guarded: the note must be
+// a draft AND belong to this patient, so a stale ?reviewNote link can't surface a
+// confirmed/foreign note. Safety flags are re-derived against THIS patient's
+// allergies (the panel does the same live), matching the dispatch-time re-check.
+export async function getDraftNoteReview(
+  noteId: string,
+  patientId: string,
+  allergies: string[],
+): Promise<NoteReviewData | null> {
+  const supabase = createAdminClient();
+  const { data: note } = await supabase
+    .from("clinical_notes")
+    .select(
+      "id, patient_id, status, medical_note, medications, nurse_tasks, icd10_suggestions",
+    )
+    .eq("id", noteId)
+    .maybeSingle();
+
+  if (!note || note.status !== "draft" || note.patient_id !== patientId) {
+    return null;
+  }
+
+  const medications = (note.medications ?? []) as Medication[];
+  return {
+    noteId: note.id,
+    medical_note: note.medical_note,
+    medications,
+    nurse_tasks: note.nurse_tasks ?? [],
+    icd10_suggestions: note.icd10_suggestions ?? [],
+    safety_flags: checkMedicationSafety(medications, allergies),
+    allergies,
+    patient_check: null,
+  };
 }
 
 export async function getPatientWindowData(

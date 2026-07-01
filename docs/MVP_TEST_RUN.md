@@ -5,6 +5,21 @@
 
 ---
 
+## 🆕 UX 修正第三輪（2026-07-02）— 提醒可「確認知悉」關閉閉環
+
+> **這一輪 = 測完 UX 第二輪後用戶回報：BP 寫超標成功升級主治＋駐院，但 inbox 沒有辦法「消掉」提醒。狀態：完成、tsc + lint 乾淨、已 commit + push（`e300922`）。無 migration。**
+> 另外釐清了兩個 demo 疑問（純解說、無改碼）：① 給藥 task 與「給藥後驗血糖」追蹤 task 是兩件事（給藥記錄 vs 事件計時安全監測），血糖檢查刻意做成可簽核 task 而非 Special Instruction；② Special Instructions = 醫生病歷裡的條件性／事件計時「留意型」醫囑（display-only + Escalate），不簽核。
+
+**問題｜升級提醒無法關閉**：主治/駐院的 alert inbox（escalation + break-glass）原本是唯讀，提醒只能靠 Demo Reset 整個歸零才消失，太重。
+- 修法：每條提醒右邊加 **✓ Acknowledge**，一按寫一條 append-only `alert_ack` 稽核列（記錄誰、何時、確認哪條），**不改原稽核列**。inbox 回填時過濾掉已確認的；realtime 訂閱 `alert_ack` → **主治按了，駐院那邊同一條也同步消失**。
+- **一視同仁涵蓋三種提醒**：手動 Escalate to attending、危急值自動升級（如 BP 超標）、break-glass 破窗——全走同一 inbox、同一 Acknowledge。ack 路由只接受 `escalation` / `break_glass_view` 的 id（其它 404，不寫悬空確認）。
+- 檔案：新 `src/app/api/alerts/[id]/ack/route.ts`（POST，僅 doctor/mo 角色）、`doctor-alerts.tsx`（按鈕＋POST＋本地移除＋realtime 同步）、`alerts-data.ts`（回填過濾已 ack）、`baseline.ts`（Demo Reset 連 `alert_ack` 一起清）。
+
+**✅ 驗證**：tsc `--noEmit` 乾淨、eslint 乾淨。
+**⏳ 待人手 UI 走查（2026-07-02 明天實測）**：BP 寫超標 → `/doctor` + `/mo` 同時出現紅色 alert → 主治按 Acknowledge → 該條消失、駐院那邊同步消失 → 刷新不回來 → Demo Reset 全清。
+
+---
+
 ## 🆕 UX 修正第二輪（2026-07-01）— 念錯床切換 + 給藥後自動追蹤
 
 > **這一輪 = 測 Script A 時用戶回報的兩個問題。狀態：完成、tsc + lint 乾淨、live 驗證 13/13、已 commit（`e05dcdd`）、待 push。無 migration。**
@@ -190,6 +205,15 @@
 - toast「Abnormal value recorded」，該格變紅。
 - 切到 `/doctor` 頂部 **alert inbox** 自動出現一條：**「Auto-Monitor · escalated — Critical Blood pressure 200/120 mmHg — auto-escalated」**（glucose 2.5 則是「Critical Blood glucose 2.5 …」）。
 - **對照**：填**輕度異常**（如 BP 150/95、glucose 12）→ 只變紅、**不**進 inbox（避免 alert fatigue）。
+
+**（新 2026-07-02）確認知悉 Acknowledge — 關閉升級閉環**
+4. 這條 alert 同時出現在 `/doctor` 與 `/mo` 兩邊 inbox（駐院也收到）。在 `/doctor` 該條右邊按 **✓ Acknowledge**。
+
+**應該看到 ✅**
+- 該條 alert 從 `/doctor` inbox 消失；若 `/mo` 也開著，**同一條在那邊也同步消失**（realtime）。
+- **重新整理 `/doctor`** → 已確認的不再回來（server 端回填也過濾掉了）。
+- 手動 **Escalate to attending**（護士/駐院在 Special Instructions 面板按）產生的 alert，Acknowledge 行為完全一樣（同一 inbox、同一通道）。
+- 按 **Demo Reset** → inbox 全清（含確認紀錄）。
 
 > critical 帶：血糖 `<3 / >20`、SBP `>180 / <80`、SpO₂ `<90`、temp `>39.5` … escalation 依**系統 critical 帶**觸發，不解析口述的自訂門檻（口述「very high/low」只當 Special Instruction 顯示文字）。
 

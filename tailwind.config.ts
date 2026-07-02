@@ -43,6 +43,11 @@ const config: Config = {
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
+  			chrome: {
+  				DEFAULT: 'hsl(var(--brand-chrome))',
+  				foreground: 'hsl(var(--brand-chrome-foreground))'
+  			},
+  			glow: 'hsl(var(--brand-glow))',
   			chart: {
   				'1': 'hsl(var(--chart-1))',
   				'2': 'hsl(var(--chart-2))',

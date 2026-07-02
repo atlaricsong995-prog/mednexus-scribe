@@ -93,7 +93,7 @@ export default function LandingPage() {
         <p className="mb-4 text-center text-sm font-medium text-slate-500">
           I am a…
         </p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="stagger-fade grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {ROLES.map(({ role, label, who, blurb, route, icon: Icon }) => (
             <Card
               key={role}

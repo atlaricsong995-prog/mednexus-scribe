@@ -48,7 +48,7 @@ export default async function DoctorPage() {
       )}
 
       {patients && patients.length > 0 ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="stagger-fade mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {patients.map((patient) => (
             <PatientCard key={patient.id} patient={patient} />
           ))}

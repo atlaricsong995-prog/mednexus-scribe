@@ -208,7 +208,7 @@ export function WardWorklist({
               {live ? "Live" : status}
             </span>
           </h2>
-          <div className="space-y-2">
+          <div className="stagger-fade space-y-2">
             {patients.map((p) => {
               const ptasks = tasksByPatient.get(p.id) ?? [];
               const activeCount = ptasks.filter((t) => isActive(t.status)).length;

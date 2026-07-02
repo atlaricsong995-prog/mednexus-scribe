@@ -202,7 +202,7 @@ export function ControlTowerBoard({
           <h2 className="mb-3 flex items-center gap-1.5 text-sm font-medium uppercase tracking-wide text-slate-400">
             <BedDouble className="h-4 w-4" /> Ward grid
           </h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="stagger-fade grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {patients.map((p) => {
               const ptasks = tasksByPatient.get(p.id) ?? [];
               const activeCount = ptasks.filter((t) => isActive(t.status)).length;

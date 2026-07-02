@@ -2,7 +2,6 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Stethoscope, Syringe, LayoutDashboard, UserCog } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -11,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ResetDemoButton } from "@/components/reset-demo-button";
+import { SubmitButton } from "@/components/submit-button";
 import type { Role } from "@/lib/supabase/types";
 
 type RoleOption = {
@@ -113,9 +113,9 @@ export default function LandingPage() {
                 <form action={pickRole}>
                   <input type="hidden" name="role" value={role} />
                   <input type="hidden" name="route" value={route} />
-                  <Button type="submit" className="w-full">
+                  <SubmitButton className="w-full">
                     Enter as {label}
-                  </Button>
+                  </SubmitButton>
                 </form>
               </CardContent>
             </Card>

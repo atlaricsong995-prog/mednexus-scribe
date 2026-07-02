@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BellRing, Check, ClipboardPen, Mic } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { HighlightOnMount } from "@/components/highlight-on-mount";
 import { PulseLoader } from "@/components/pulse-loader";
 import { useRealtimeTasks } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
@@ -106,69 +107,70 @@ export function ApprovalsPanel({
   const row = (t: Task, kind: "proposal" | "completion") => {
     const p = patientMap.get(t.patient_id);
     return (
-      <div
-        key={t.id}
-        className={cn(
-          "flex items-center justify-between gap-3 rounded-lg border bg-white p-3",
-          t.abnormal
-            ? "border-red-300"
-            : t.proposed_by_mo
-              ? "border-sky-200"
-              : "border-amber-200",
-        )}
-      >
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-900">
-            {t.description}
-          </p>
-          <p className="text-xs text-slate-500">
-            {p ? `Bed ${p.bed_number} · ${p.full_name}` : "—"}
-            {t.proposed_by_mo ? " · proposed by resident" : ""}
-            {t.completion_value ? (
-              <span className={cn(t.abnormal && "font-semibold text-red-600")}>
-                {" · "}
-                {t.completion_value}
-                {t.abnormal ? " ⚠ abnormal" : ""}
-              </span>
-            ) : (
-              ""
-            )}
-            {t.completion_notes && !t.proposed_by_mo
-              ? ` · ${t.completion_notes}`
-              : ""}
-          </p>
-          {/* Resident's rationale (Workstream D) — their "why", to speed the
-              attending's approve/reject decision. */}
-          {t.proposed_by_mo && t.completion_notes && (
-            <p className="mt-0.5 text-xs text-sky-700">
-              Rationale: {t.completion_notes}
-            </p>
+      <HighlightOnMount key={t.id} className="animate-fade-in-up">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 rounded-lg border bg-white p-3",
+            t.abnormal
+              ? "border-red-300"
+              : t.proposed_by_mo
+                ? "border-sky-200"
+                : "border-amber-200",
           )}
-          {/* Abnormal value the nurse flagged — let the doctor act on it (not just
-              acknowledge) by jumping straight to dictating a new order (問題 3d). */}
-          {t.abnormal && p && (
-            <Link
-              href={`/doctor/${encodeURIComponent(p.bed_number)}`}
-              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-red-600 underline-offset-2 hover:underline"
-            >
-              <Mic className="h-3.5 w-3.5" /> Dictate order →
-            </Link>
-          )}
-        </div>
-        <Button
-          size="sm"
-          onClick={() => approve(t.id, kind)}
-          disabled={approving === t.id}
-          className="shrink-0"
         >
-          {approving === t.id ? (
-            <PulseLoader className="text-current" />
-          ) : (
-            <Check className="h-4 w-4" />
-          )}
-          {kind === "proposal" ? "Authorise" : "Acknowledge"}
-        </Button>
-      </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-slate-900">
+              {t.description}
+            </p>
+            <p className="text-xs text-slate-500">
+              {p ? `Bed ${p.bed_number} · ${p.full_name}` : "—"}
+              {t.proposed_by_mo ? " · proposed by resident" : ""}
+              {t.completion_value ? (
+                <span className={cn(t.abnormal && "font-semibold text-red-600")}>
+                  {" · "}
+                  {t.completion_value}
+                  {t.abnormal ? " ⚠ abnormal" : ""}
+                </span>
+              ) : (
+                ""
+              )}
+              {t.completion_notes && !t.proposed_by_mo
+                ? ` · ${t.completion_notes}`
+                : ""}
+            </p>
+            {/* Resident's rationale (Workstream D) — their "why", to speed the
+                attending's approve/reject decision. */}
+            {t.proposed_by_mo && t.completion_notes && (
+              <p className="mt-0.5 text-xs text-sky-700">
+                Rationale: {t.completion_notes}
+              </p>
+            )}
+            {/* Abnormal value the nurse flagged — let the doctor act on it (not just
+                acknowledge) by jumping straight to dictating a new order (問題 3d). */}
+            {t.abnormal && p && (
+              <Link
+                href={`/doctor/${encodeURIComponent(p.bed_number)}`}
+                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-red-600 underline-offset-2 hover:underline"
+              >
+                <Mic className="h-3.5 w-3.5" /> Dictate order →
+              </Link>
+            )}
+          </div>
+          <Button
+            size="sm"
+            onClick={() => approve(t.id, kind)}
+            disabled={approving === t.id}
+            className="shrink-0"
+          >
+            {approving === t.id ? (
+              <PulseLoader className="text-current" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+            {kind === "proposal" ? "Authorise" : "Acknowledge"}
+          </Button>
+        </div>
+      </HighlightOnMount>
     );
   };
 

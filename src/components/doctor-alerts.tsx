@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ShieldAlert, BellRing, Check } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { HighlightOnMount } from "@/components/highlight-on-mount";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { buildPatientMap, type PatientLite } from "@/lib/tasks";
@@ -152,47 +153,46 @@ export function DoctorAlerts({
         {entries.map((e) => {
           const p = e.patientId ? patientMap.get(e.patientId) : undefined;
           return (
-            <li
-              key={e.id}
-              className="flex items-start gap-2 rounded-lg border border-red-100 bg-white px-3 py-2 text-xs"
-            >
-              <span
-                className={cn(
-                  "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                  e.action === "break_glass_view"
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-red-100 text-red-700",
-                )}
-              >
-                {e.action === "break_glass_view" ? (
-                  <ShieldAlert className="h-3 w-3" />
-                ) : (
-                  <BellRing className="h-3 w-3" />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-slate-800">
-                  <span className="font-medium capitalize">{e.who}</span>
-                  {" · "}
-                  {e.action === "break_glass_view"
-                    ? "opened a masked record"
-                    : "escalated"}
-                  {p ? ` — Bed ${p.bed_number} · ${p.full_name}` : ""}
-                </p>
-                <p className="text-slate-500">
-                  {e.at} — “{e.text}”
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => acknowledge(e.id)}
-                disabled={acking.has(e.id)}
-                className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
-              >
-                <Check className="h-3 w-3" />
-                {acking.has(e.id) ? "…" : "Acknowledge"}
-              </button>
-            </li>
+            <HighlightOnMount key={e.id} className="animate-fade-in-up">
+              <li className="flex items-start gap-2 rounded-lg border border-red-100 bg-white px-3 py-2 text-xs">
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                    e.action === "break_glass_view"
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-red-100 text-red-700",
+                  )}
+                >
+                  {e.action === "break_glass_view" ? (
+                    <ShieldAlert className="h-3 w-3" />
+                  ) : (
+                    <BellRing className="h-3 w-3" />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-slate-800">
+                    <span className="font-medium capitalize">{e.who}</span>
+                    {" · "}
+                    {e.action === "break_glass_view"
+                      ? "opened a masked record"
+                      : "escalated"}
+                    {p ? ` — Bed ${p.bed_number} · ${p.full_name}` : ""}
+                  </p>
+                  <p className="text-slate-500">
+                    {e.at} — “{e.text}”
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => acknowledge(e.id)}
+                  disabled={acking.has(e.id)}
+                  className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <Check className="h-3 w-3" />
+                  {acking.has(e.id) ? "…" : "Acknowledge"}
+                </button>
+              </li>
+            </HighlightOnMount>
           );
         })}
       </ul>

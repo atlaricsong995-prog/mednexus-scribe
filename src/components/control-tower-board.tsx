@@ -263,7 +263,7 @@ export function ControlTowerBoard({
               </p>
             ) : (
               feed.map((e) => (
-                <div key={e.key} className="flex gap-2 text-xs">
+                <div key={e.key} className="flex animate-fade-in-up gap-2 text-xs">
                   <span className="shrink-0 tabular-nums text-slate-400">
                     {e.at}
                   </span>

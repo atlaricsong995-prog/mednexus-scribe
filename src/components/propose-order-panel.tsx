@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Send, ClipboardPen } from "lucide-react";
+import { Send, ClipboardPen } from "lucide-react";
 
+import { PulseLoader } from "@/components/pulse-loader";
 import {
   Card,
   CardContent,
@@ -274,7 +275,7 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
             disabled={sending || !canSubmit}
           >
             {sending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <PulseLoader className="text-current" />
             ) : (
               <Send className="h-4 w-4" />
             )}

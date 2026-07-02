@@ -13,10 +13,10 @@ import {
   UserCheck,
   UserX,
   ArrowRightLeft,
-  Loader2,
 } from "lucide-react";
 
 import { useToast } from "@/hooks/use-toast";
+import { PulseLoader } from "@/components/pulse-loader";
 
 import {
   Card,
@@ -270,7 +270,7 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
                 className="bg-amber-600 hover:bg-amber-700"
               >
                 {retargeting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <PulseLoader className="text-current" />
                 ) : (
                   <ArrowRightLeft className="h-4 w-4" />
                 )}

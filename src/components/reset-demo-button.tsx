@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw, Loader2 } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PulseLoader } from "@/components/pulse-loader";
 import { useToast } from "@/hooks/use-toast";
 
 // Demo reset control (landing page). Wipes the tester's run and restores Ward 5A
@@ -46,7 +47,7 @@ export function ResetDemoButton() {
         onBlur={() => setArming(false)}
       >
         {busy ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <PulseLoader className="text-current" />
         ) : (
           <RotateCcw className="h-4 w-4" />
         )}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Lock, ShieldAlert, Loader2 } from "lucide-react";
+import { Lock, ShieldAlert } from "lucide-react";
 
+import { PulseLoader } from "@/components/pulse-loader";
 import {
   Dialog,
   DialogContent,
@@ -139,7 +140,7 @@ export function LockedRecord({
             </Button>
             <Button onClick={confirm} disabled={submitting || !reason.trim()}>
               {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <PulseLoader className="text-current" />
               ) : (
                 <ShieldAlert className="h-4 w-4" />
               )}

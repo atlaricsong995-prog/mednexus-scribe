@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, TriangleAlert } from "lucide-react";
 
+import { PulseLoader } from "@/components/pulse-loader";
 import {
   Dialog,
   DialogContent,
@@ -214,7 +215,7 @@ export function CompletionDialog({
           </Button>
           <Button onClick={submit} disabled={submitting || !canSubmit}>
             {submitting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <PulseLoader className="text-current" />
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}

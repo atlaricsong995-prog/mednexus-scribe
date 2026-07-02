@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Mic, Square, Loader2, RotateCcw, Sparkles } from "lucide-react";
+import { Mic, Square, RotateCcw, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PulseLoader } from "@/components/pulse-loader";
 import { useToast } from "@/hooks/use-toast";
 import { useRecorder } from "@/hooks/use-recorder";
 import { uploadRecording } from "@/app/doctor/actions";
@@ -184,7 +185,7 @@ export function Recorder({ patientId }: { patientId: string }) {
 
             {busy && (
               <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <PulseLoader className="text-current" />
                 {PHASE_LABEL[phase as keyof typeof PHASE_LABEL]}
               </div>
             )}

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { BellRing, Loader2 } from "lucide-react";
+import { BellRing } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PulseLoader } from "@/components/pulse-loader";
 import { escalateToAttending } from "@/app/patient/actions";
 import { useToast } from "@/hooks/use-toast";
 
@@ -55,7 +56,7 @@ export function EscalateButton({
       className="border-red-300 text-red-700 hover:bg-red-50"
     >
       {sending ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <PulseLoader className="text-current" />
       ) : (
         <BellRing className="h-4 w-4" />
       )}

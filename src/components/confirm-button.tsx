@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Loader2, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Send, CheckCircle2, ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PulseLoader } from "@/components/pulse-loader";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -150,7 +151,7 @@ export function ConfirmButton({
         className="w-full"
       >
         {submitting ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <PulseLoader className="text-current" />
         ) : (
           <Send className="h-4 w-4" />
         )}

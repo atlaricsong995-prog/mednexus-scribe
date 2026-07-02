@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { BellRing, Check, Loader2, ClipboardPen, Mic } from "lucide-react";
+import { BellRing, Check, ClipboardPen, Mic } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PulseLoader } from "@/components/pulse-loader";
 import { useRealtimeTasks } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -161,7 +162,7 @@ export function ApprovalsPanel({
           className="shrink-0"
         >
           {approving === t.id ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <PulseLoader className="text-current" />
           ) : (
             <Check className="h-4 w-4" />
           )}

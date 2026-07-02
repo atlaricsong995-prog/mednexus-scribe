@@ -154,7 +154,7 @@ export function DoctorAlerts({
           return (
             <li
               key={e.id}
-              className="animate-highlight animate-fade-in-up flex items-start gap-2 rounded-lg border border-red-100 bg-white px-3 py-2 text-xs"
+              className="animate-highlight-in flex items-start gap-2 rounded-lg border border-red-100 bg-white px-3 py-2 text-xs"
             >
               <span
                 className={cn(

@@ -94,7 +94,8 @@ const config: Config = {
   			heartbeat: 'heartbeat 1s ease-in-out infinite',
   			'fade-in-up': 'fade-in-up 0.22s ease-out both',
   			breathe: 'breathe 2s ease-in-out infinite',
-  			highlight: 'highlight 1.6s ease-out both'
+  			highlight: 'highlight 1.6s ease-out both',
+  			'highlight-in': 'fade-in-up 0.22s ease-out both, highlight 1.6s ease-out both'
   		}
   	}
   },

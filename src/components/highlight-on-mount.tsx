@@ -11,5 +11,5 @@ export function HighlightOnMount({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={cn("animate-highlight rounded-md", className)}>{children}</div>;
+  return <div className={cn("animate-highlight-in rounded-md", className)}>{children}</div>;
 }

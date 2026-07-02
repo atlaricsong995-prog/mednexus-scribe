@@ -96,10 +96,14 @@
   .animate-fade-in-up,
   .animate-heartbeat,
   .animate-breathe,
-  .animate-highlight {
+  .animate-highlight,
+  .animate-highlight-in {
     animation: none !important;
   }
   .hover\:-translate-y-px:hover {
+    transform: none !important;
+  }
+  .active\:scale-\[0\.98\]:active {
     transform: none !important;
   }
 }

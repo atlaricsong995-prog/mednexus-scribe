@@ -107,7 +107,7 @@ export function ApprovalsPanel({
   const row = (t: Task, kind: "proposal" | "completion") => {
     const p = patientMap.get(t.patient_id);
     return (
-      <HighlightOnMount key={t.id} className="animate-fade-in-up">
+      <HighlightOnMount key={t.id}>
         <div
           className={cn(
             "flex items-center justify-between gap-3 rounded-lg border bg-white p-3",

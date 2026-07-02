@@ -70,6 +70,31 @@ const config: Config = {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
+  		},
+  		keyframes: {
+  			heartbeat: {
+  				'0%,100%': { transform: 'scaleY(0.4)', opacity: '0.6' },
+  				'40%': { transform: 'scaleY(1)', opacity: '1' },
+  				'70%': { transform: 'scaleY(0.7)', opacity: '0.9' }
+  			},
+  			'fade-in-up': {
+  				'0%': { opacity: '0', transform: 'translateY(6px)' },
+  				'100%': { opacity: '1', transform: 'translateY(0)' }
+  			},
+  			breathe: {
+  				'0%,100%': { opacity: '1', transform: 'scale(1)' },
+  				'50%': { opacity: '0.55', transform: 'scale(0.85)' }
+  			},
+  			highlight: {
+  				'0%': { backgroundColor: 'hsl(var(--brand-glow) / 0.18)' },
+  				'100%': { backgroundColor: 'transparent' }
+  			}
+  		},
+  		animation: {
+  			heartbeat: 'heartbeat 1s ease-in-out infinite',
+  			'fade-in-up': 'fade-in-up 0.22s ease-out both',
+  			breathe: 'breathe 2s ease-in-out infinite',
+  			highlight: 'highlight 1.6s ease-out both'
   		}
   	}
   },

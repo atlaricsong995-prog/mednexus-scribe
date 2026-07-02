@@ -91,3 +91,15 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-heartbeat,
+  .animate-breathe,
+  .animate-highlight {
+    animation: none !important;
+  }
+  .hover\:-translate-y-px:hover {
+    transform: none !important;
+  }
+}

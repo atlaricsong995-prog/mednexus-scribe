@@ -1,9 +1,9 @@
-import Link from "next/link";
-import { UserCog } from "lucide-react";
+import { UserCog, LayoutDashboard } from "lucide-react";
 
 import { PatientWindow } from "@/components/patient-window";
 import { WardWorklist } from "@/components/ward-worklist";
 import { DoctorAlerts } from "@/components/doctor-alerts";
+import { AppShell } from "@/components/app-shell";
 import { getRole } from "@/lib/server/role";
 import { getWardData } from "@/lib/server/ward-data";
 import { getPatientWindowData } from "@/lib/server/patient-window-data";
@@ -34,30 +34,15 @@ export default async function MoPage({
   const data = bed ? await getPatientWindowData(WARD, bed, role) : null;
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-8">
-      <header className="mb-6 flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-slate-50">
-            <UserCog className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-slate-400">
-              Medical Officer · Resident
-            </p>
-            <h1 className="text-2xl font-bold text-slate-900">My Patients</h1>
-            <p className="text-sm text-slate-500">
-              {WARD} · {patients.length} patients · propose orders, escalate
-            </p>
-          </div>
-        </div>
-        <Link
-          href="/"
-          className="shrink-0 text-sm text-slate-500 underline-offset-4 hover:underline"
-        >
-          ← Switch role
-        </Link>
-      </header>
-
+    <AppShell
+      roleLabel="Medical Officer · Resident"
+      title="My Patients"
+      subtitle={`${WARD} · ${patients.length} patients · propose orders, escalate`}
+      icon={UserCog}
+      navItems={[
+        { label: "My Patients", href: "/mo", icon: LayoutDashboard, active: true },
+      ]}
+    >
       <DoctorAlerts patients={patients} initialAlerts={initialAlerts} />
 
       <WardWorklist
@@ -81,6 +66,6 @@ export default async function MoPage({
           />
         )}
       </WardWorklist>
-    </main>
+    </AppShell>
   );
 }

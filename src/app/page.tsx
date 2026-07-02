@@ -100,7 +100,7 @@ export default function LandingPage() {
               className="flex flex-col border-slate-200 shadow-sm transition-shadow hover:shadow-md"
             >
               <CardHeader className="items-center text-center">
-                <span className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-slate-50">
+                <span className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-full bg-chrome text-chrome-foreground">
                   <Icon className="h-6 w-6" />
                 </span>
                 <CardTitle className="text-xl">{label}</CardTitle>

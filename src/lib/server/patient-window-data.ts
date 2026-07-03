@@ -154,16 +154,30 @@ export async function getPatientWindowData(
     getAdHocTasks(patient.id),
   ]);
 
-  // Record body + history are only loaded when the role may see them; the
+  // Record body + history are only EXPOSED when the role may see them; the
   // watch-for list is operational and shown to everyone (computed server-side).
   const showRecord = canViewRecord(role);
   const note = showRecord ? currentNote : null;
-  const history = showRecord ? await getRecordHistory(patient.id) : [];
+  const fullHistory = await getRecordHistory(patient.id);
+  const history = showRecord ? fullHistory : [];
 
-  const watchFor: NurseTask[] =
-    currentNote?.nurse_tasks.filter(
-      (t) => t.conditions || t.priority === "high" || t.priority === "critical",
-    ) ?? [];
+  // Standing/special instructions carry FORWARD across note confirmations: a new
+  // ward-round note archives the previous record, but its standing orders (glucose
+  // monitoring, wound checks…) don't stop existing — aggregate qualifying tasks
+  // from the current note plus the archived timeline (newest first), deduped.
+  const qualifies = (t: NurseTask) =>
+    !!t.conditions || t.priority === "high" || t.priority === "critical";
+  const watchFor: NurseTask[] = [];
+  const seen = new Set<string>();
+  for (const n of [currentNote, ...fullHistory]) {
+    for (const t of n?.nurse_tasks ?? []) {
+      const key = t.task.trim().toLowerCase();
+      if (qualifies(t) && !seen.has(key)) {
+        seen.add(key);
+        watchFor.push(t);
+      }
+    }
+  }
 
   return { patient, note, history, watchFor, routineTasks, medTasks, adHocTasks };
 }

@@ -246,7 +246,11 @@ export function PatientWindow({
       </Card>
 
       {/* MO-only — propose an order to the attending (Enh Day 4) */}
-      {role === "mo" && <ProposeOrderPanel patientId={patient.id} />}
+      {/* Keyed by patient for the same reason as EscalateButton below — a
+          half-typed order draft must not follow the MO to another patient. */}
+      {role === "mo" && (
+        <ProposeOrderPanel key={patient.id} patientId={patient.id} />
+      )}
 
       {/* Section 4 — Special instructions (display-only + escalate) */}
       <Card className="border-slate-200">
@@ -260,7 +264,11 @@ export function PatientWindow({
               </span>
             </CardTitle>
             {canEscalate && (
+              // Keyed by patient: the master-detail layout reuses this component
+              // instance across bed switches, and an unkeyed button kept its
+              // "Attending notified" done-state from the previous patient.
               <EscalateButton
+                key={patient.id}
                 patientId={patient.id}
                 bedNumber={patient.bed_number}
               />

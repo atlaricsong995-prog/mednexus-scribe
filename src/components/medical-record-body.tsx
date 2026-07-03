@@ -14,6 +14,14 @@ const NOTE_FIELDS: { key: keyof ClinicalNote["medical_note"]; label: string }[] 
   { key: "plan", label: "Plan" },
 ];
 
+// The operative-report stub only makes sense for a patient whose record actually
+// describes surgery (e.g. Bed 12, post lap-chole). A medical admission — including
+// Bed 17's fresh pneumonia note — must not sprout a surgical report.
+function isSurgicalNote(note: ClinicalNote): boolean {
+  const text = NOTE_FIELDS.map(({ key }) => note.medical_note[key] ?? "").join(" ");
+  return /\b(surg\w*|operat\w*|post-?op\w*|laparoscop\w*|\w+ectomy)\b/i.test(text);
+}
+
 function medLine(m: Medication): string {
   const parts = [m.drug, m.dose, m.route, m.frequency]
     .map((p) => p?.trim())
@@ -103,7 +111,7 @@ export function MedicalRecordBody({
         </div>
       )}
 
-      {variant === "current" && (
+      {variant === "current" && isSurgicalNote(note) && (
         <SurgicalReportButton patientNote={note.medical_note.assessment} />
       )}
     </div>

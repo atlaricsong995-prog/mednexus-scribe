@@ -49,6 +49,17 @@ function norm(s: string): string {
   return (s ?? "").toLowerCase();
 }
 
+// Whisper sometimes glues spoken tokens into one word — a real transcript
+// contained "Mr. StrongBed17" for "Mrs. Chong, bed 17", which defeats every
+// \b-anchored pattern below. Split camelCase and letter↔digit seams first
+// (must run BEFORE lowercasing, which erases the case boundary).
+function splitGlued(s: string): string {
+  return (s ?? "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Za-z])(\d)/g, "$1 $2")
+    .replace(/(\d)([A-Za-z])/g, "$1 $2");
+}
+
 export function label(p: RosterPatient): string {
   return `Bed ${p.bed_number} · ${p.full_name} · ${p.mrn}`;
 }
@@ -131,7 +142,7 @@ export function crossCheckPatient(
   open: RosterPatient,
   roster: RosterPatient[],
 ): PatientCheck {
-  const t = norm(transcript);
+  const t = norm(splitGlued(transcript));
   const beds = spokenBeds(t);
 
   const openScore = scorePatient(t, beds, open);

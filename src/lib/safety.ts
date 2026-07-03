@@ -55,9 +55,13 @@ function matches(drug: string, key: string): boolean {
 }
 
 // Re-derive D-008 safety flags from the final medication list + allergies.
+// `currentMeds` = the patient's current confirmed record's medications — a newly
+// prescribed drug that is already on that chart raises a duplicate warning
+// (double-ordering, or an intentional "continue" the doctor should confirm).
 export function checkMedicationSafety(
   meds: Medication[],
   allergies: string[],
+  currentMeds: Medication[] = [],
 ): SafetyFlag[] {
   const flags: SafetyFlag[] = [];
   const allergyLabels = (allergies ?? []).map(norm).filter(Boolean);
@@ -97,7 +101,27 @@ export function checkMedicationSafety(
     }
   }
 
-  // 3. Duplicate drug class -> warning.
+  // 3. Already on the current chart -> duplicate warning. The new order may be a
+  // deliberate continuation, but the doctor must see that the drug is already
+  // prescribed rather than silently stacking a second order.
+  for (const m of meds) {
+    const drug = norm(m.drug);
+    if (!drug) continue;
+    const existing = (currentMeds ?? []).find((c) => {
+      const cur = norm(c.drug);
+      return !!cur && matches(drug, cur);
+    });
+    if (existing) {
+      flags.push({
+        type: "duplicate",
+        drug: m.drug,
+        reason: `${m.drug} is already on the current medication chart (${[existing.drug, existing.dose, existing.frequency].filter(Boolean).join(" ")}). Confirm this replaces the existing order.`,
+        severity: "warning",
+      });
+    }
+  }
+
+  // 4. Duplicate drug class -> warning.
   const byClass = new Map<string, string[]>();
   for (const m of meds) {
     const drug = norm(m.drug);

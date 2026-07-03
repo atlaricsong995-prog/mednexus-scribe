@@ -193,7 +193,21 @@ export async function POST(req: Request) {
   // dangerous one raises a new flag. We keep any extract-time flag whose drug is
   // still prescribed and that our deterministic rules didn't already catch (so a
   // Gemini-only catch isn't lost), but drop flags for removed drugs entirely.
-  const recomputed = checkMedicationSafety(medications, patient.allergies ?? []);
+  // The still-confirmed prior record (archived further below) supplies the
+  // already-on-chart duplicate check.
+  const { data: priorNote } = await supabase
+    .from("clinical_notes")
+    .select("medications")
+    .eq("patient_id", note.patient_id)
+    .eq("status", "confirmed")
+    .order("confirmed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const recomputed = checkMedicationSafety(
+    medications,
+    patient.allergies ?? [],
+    (priorNote?.medications ?? []) as Medication[],
+  );
   const clientFlags = (parsed.data.safety_flags ?? []) as SafetyFlag[];
   const stillPrescribed = (drug: string) =>
     medications.some((m) => {
@@ -268,6 +282,17 @@ export async function POST(req: Request) {
     .eq("status", "confirmed")
     .neq("id", noteId);
 
+  // Abandoned drafts (extracted but never confirmed) are superseded by this
+  // confirmation — remove them so they stop resurfacing on the bed page. Drafts
+  // never entered the medical record, so deleting them doesn't break append-only;
+  // their extraction stays traceable in the audit_log.
+  await supabase
+    .from("clinical_notes")
+    .delete()
+    .eq("patient_id", note.patient_id)
+    .eq("status", "draft")
+    .neq("id", noteId);
+
   // Supersede prior un-administered MAR cells: a newly-confirmed order replaces the
   // old standing medication orders. Already-charted (approved) cells stay as history;
   // pending cells from earlier notes are cleared so the give-time grid reflects the
@@ -279,6 +304,22 @@ export async function POST(req: Request) {
     .eq("patient_id", note.patient_id)
     .not("med_key", "is", null)
     .in("status", ["pending", "in_progress"]);
+
+  // Cells that survived the supersede are already-charted history (the nurse
+  // signed them). Re-dispatching the same drug must SKIP those (patient,drug,slot)
+  // cells — the dose was given — instead of colliding with tasks_med_unique and
+  // leaving a confirmed note with no tasks.
+  const { data: chartedMedCells } = await supabase
+    .from("tasks")
+    .select("med_key, scheduled_for")
+    .eq("patient_id", note.patient_id)
+    .not("med_key", "is", null)
+    .not("scheduled_for", "is", null);
+  const chartedCells = new Set(
+    (chartedMedCells ?? []).map(
+      (c) => `${c.med_key}|${Date.parse(c.scheduled_for as string)}`,
+    ),
+  );
 
   // 3. Build tasks rows — medications fan out into a MAR (one cell per drug ×
   // today's administration slot); nurse_tasks map 1:1 (Tech Spec §2.1 mapping).
@@ -294,8 +335,11 @@ export async function POST(req: Request) {
     const key = medKey(m.drug);
     const slots = todayMedSlots(m.frequency);
     // PRN / unknown frequency → one ad-hoc cell (scheduled_for null).
-    const cells: (string | null)[] =
-      slots.length > 0 ? slots.map((s) => s.iso) : [null];
+    const cells: (string | null)[] = (
+      slots.length > 0 ? slots.map((s) => s.iso) : [null]
+    ).filter(
+      (iso) => iso === null || !chartedCells.has(`${key}|${Date.parse(iso)}`),
+    );
     return cells.map((scheduledFor) => ({
       note_id: noteId,
       patient_id: note.patient_id,

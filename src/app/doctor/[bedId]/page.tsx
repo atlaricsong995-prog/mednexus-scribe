@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, FolderOpen, UserCheck } from "lucide-react";
+import { ChevronLeft, FileClock, FolderOpen, UserCheck } from "lucide-react";
 
 import { PatientSummary } from "@/components/patient-summary";
 import { PatientWindow } from "@/components/patient-window";
 import { PatientWindowModal } from "@/components/patient-window-modal";
 import { NoteReviewPanel } from "@/components/note-review-panel";
+import { DiscardDraftButton } from "@/components/discard-draft-button";
 import { Recorder } from "@/components/recorder";
 import { getRole } from "@/lib/server/role";
 import {
   getPatientWindowData,
   getDraftNoteReview,
+  getLatestDraftReview,
 } from "@/lib/server/patient-window-data";
 import { WARD } from "@/lib/constants";
 
@@ -42,6 +44,13 @@ export default async function PatientDetailPage({
         patient.allergies ?? [],
       )
     : null;
+
+  // No explicit ?reviewNote: restore the latest abandoned draft, if any.
+  // Extraction persists the draft immediately, so leaving the page before
+  // dispatch must not lose the note — it re-opens here to confirm or discard.
+  const restoredDraft = reviewNote
+    ? null
+    : await getLatestDraftReview(patient.id, patient.allergies ?? []);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-8">
@@ -96,6 +105,21 @@ export default async function PatientDetailPage({
               </span>
             </div>
             <NoteReviewPanel data={reviewNote} />
+          </section>
+        ) : restoredDraft ? (
+          <section>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span className="flex items-center gap-2">
+                <FileClock className="h-4 w-4 shrink-0" />
+                <span>
+                  Unconfirmed draft restored — it was extracted earlier but never
+                  dispatched. Review and confirm, or discard to dictate a new
+                  note.
+                </span>
+              </span>
+              <DiscardDraftButton noteId={restoredDraft.noteId} />
+            </div>
+            <NoteReviewPanel data={restoredDraft} />
           </section>
         ) : (
           <section>

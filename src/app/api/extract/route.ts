@@ -50,21 +50,31 @@ export async function POST(req: Request) {
   const supabase = createAdminClient();
 
   // Fetch transcript + patient context server-side (don't trust the client for
-  // dictations — the saved transcription row is canonical).
-  const [{ data: transcription }, { data: patient }] = await Promise.all([
-    transcriptionId
-      ? supabase
-          .from("transcriptions")
-          .select("id, raw_text")
-          .eq("id", transcriptionId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("patients")
-      .select("id, full_name, diagnosis, allergies, bed_number, mrn, ward")
-      .eq("id", patientId)
-      .maybeSingle(),
-  ]);
+  // dictations — the saved transcription row is canonical). The current confirmed
+  // record's medications feed the already-on-chart duplicate check in the panel.
+  const [{ data: transcription }, { data: patient }, { data: currentNote }] =
+    await Promise.all([
+      transcriptionId
+        ? supabase
+            .from("transcriptions")
+            .select("id, raw_text")
+            .eq("id", transcriptionId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("patients")
+        .select("id, full_name, diagnosis, allergies, bed_number, mrn, ward")
+        .eq("id", patientId)
+        .maybeSingle(),
+      supabase
+        .from("clinical_notes")
+        .select("medications")
+        .eq("patient_id", patientId)
+        .eq("status", "confirmed")
+        .order("confirmed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
   if (transcriptionId && !transcription) {
     return NextResponse.json(
@@ -174,6 +184,8 @@ export async function POST(req: Request) {
     // Carried to the review panel so it can re-derive inline safety flags live
     // as the doctor edits the medication list (D-008).
     allergies: patient.allergies ?? [],
+    // Current confirmed record's meds — powers the already-on-chart duplicate flag.
+    current_medications: currentNote?.medications ?? [],
     // Soft right-patient advisory (Enh Day 2) — surfaced as a banner, not a block.
     patient_check: patientCheck,
   });

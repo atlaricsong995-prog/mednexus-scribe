@@ -90,3 +90,39 @@ export async function uploadRecording(
     durationSeconds: Math.round(durationSeconds),
   };
 }
+
+// Discard an unconfirmed draft note (the bed page restores abandoned drafts, so
+// the doctor needs a way to throw one away and dictate afresh). Guarded to
+// status='draft' — a confirmed/archived note is part of the record and can never
+// be deleted. The extraction remains traceable in the audit_log.
+export async function discardDraft(
+  noteId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!noteId) return { ok: false, error: "Missing note id." };
+  const supabase = createAdminClient();
+
+  const { data: deleted, error } = await supabase
+    .from("clinical_notes")
+    .delete()
+    .eq("id", noteId)
+    .eq("status", "draft")
+    .select("id, patient_id");
+
+  if (error) {
+    return { ok: false, error: `Could not discard draft: ${error.message}` };
+  }
+  if (!deleted?.length) {
+    return { ok: false, error: "Draft not found (it may already be confirmed)." };
+  }
+
+  await supabase.from("audit_log").insert({
+    actor_id: DEMO_DOCTOR_ID,
+    actor_role: "doctor",
+    action: "discard_draft",
+    entity_type: "clinical_note",
+    entity_id: noteId,
+    metadata: { patient_id: deleted[0].patient_id },
+  });
+
+  return { ok: true };
+}

@@ -62,6 +62,9 @@ export interface NoteReviewData {
   // Patient allergies — lets the panel re-derive D-008 flags live as the doctor
   // edits the medication list (add Augmentin → red box appears on that row).
   allergies: string[];
+  // Medications on the patient's CURRENT confirmed record — re-prescribing one
+  // raises a live duplicate warning (already-on-chart check).
+  current_medications?: Medication[];
   // Soft right-patient advisory (Enh Day 2). Null when unavailable.
   patient_check?: PatientCheck | null;
 }
@@ -148,6 +151,9 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
   // Allergies + right-patient check are stateful so the actionable banner can
   // re-target the note to the correct patient and re-derive safety flags live.
   const [allergies, setAllergies] = useState<string[]>(data.allergies ?? []);
+  const [currentMeds, setCurrentMeds] = useState<Medication[]>(
+    data.current_medications ?? [],
+  );
   const [check, setCheck] = useState<PatientCheck | null>(
     data.patient_check ?? null,
   );
@@ -185,6 +191,7 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
       }
       // Fallback (no bed number) — keep the old in-place banner behaviour.
       setAllergies(d.allergies ?? []);
+      setCurrentMeds(d.current_medications ?? []);
       setMovedTo(check.spokenLabel ?? d.label ?? "the correct patient");
       setCheck(null);
     } catch (err) {
@@ -233,8 +240,8 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
   // Live D-008 re-derivation. Same deterministic checker the server runs on
   // dispatch, so the inline frames the doctor sees match what gates dispatch.
   const flags = useMemo(
-    () => checkMedicationSafety(meds, allergies),
-    [meds, allergies],
+    () => checkMedicationSafety(meds, allergies, currentMeds),
+    [meds, allergies, currentMeds],
   );
   const criticalFlags = flags.filter((f) => f.severity === "critical");
   const warningFlags = flags.filter((f) => f.severity === "warning");
@@ -502,8 +509,9 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
                     />
                   </div>
                   {/* Admin instruction (Workstream E) — advisory food-timing /
-                      caution, shown to the nurse on the MAR. Optional. */}
-                  <div className="col-span-2 sm:col-span-1">
+                      caution, shown to the nurse on the MAR. Optional. Two grid
+                      columns so "empty stomach" / "after food" reads unclipped. */}
+                  <div className="col-span-2 sm:col-span-2">
                     <FieldLabel>Admin</FieldLabel>
                     <select
                       value={m.admin_instruction ?? ""}

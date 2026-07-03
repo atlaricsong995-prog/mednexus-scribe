@@ -120,16 +120,39 @@ export async function getDraftNoteReview(
   }
 
   const medications = (note.medications ?? []) as Medication[];
+  const currentMeds = ((await getLatestConfirmedNote(patientId))?.medications ??
+    []) as Medication[];
   return {
     noteId: note.id,
     medical_note: note.medical_note,
     medications,
     nurse_tasks: note.nurse_tasks ?? [],
     icd10_suggestions: note.icd10_suggestions ?? [],
-    safety_flags: checkMedicationSafety(medications, allergies),
+    safety_flags: checkMedicationSafety(medications, allergies, currentMeds),
     allergies,
+    current_medications: currentMeds,
     patient_check: null,
   };
+}
+
+// The doctor's most recent unconfirmed draft for a patient, rebuilt as a review
+// payload — extraction persists a draft immediately, so navigating away before
+// dispatch must NOT lose the note. The bed page restores it on the next visit.
+export async function getLatestDraftReview(
+  patientId: string,
+  allergies: string[],
+): Promise<NoteReviewData | null> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("clinical_notes")
+    .select("id")
+    .eq("patient_id", patientId)
+    .eq("status", "draft")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  return getDraftNoteReview(data.id, patientId, allergies);
 }
 
 export async function getPatientWindowData(

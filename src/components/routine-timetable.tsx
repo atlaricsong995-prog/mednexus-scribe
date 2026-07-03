@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   DEFAULT_ROUTINE,
   OBSERVATION_CATALOG,
+  obsSeverity,
   routineKey,
   todayRoutineSlots,
 } from "@/lib/clinical/vocab";
@@ -83,10 +84,22 @@ export function RoutineTimetable({
                 {slots.map((s) => {
                   const task = byCell.get(`${key}|${s.hour}`);
                   const filled = task && task.completion_value;
+                  // Two-band colouring mirrors the server's escalation logic
+                  // (obsSeverity): mildly-out-of-range → orange, critical band
+                  // (the one that auto-escalates) → red.
+                  const severity = filled
+                    ? obsSeverity(task!.obs_type, task!.completion_value)
+                    : "normal";
                   // Overdue: a past slot that still hasn't been charted.
                   const overdue = !filled && s.hour <= nowHour;
                   const title = filled
-                    ? `${task!.completion_value}${task!.abnormal ? " — abnormal" : ""}${
+                    ? `${task!.completion_value}${
+                        severity === "critical"
+                          ? " — critical"
+                          : severity === "abnormal"
+                            ? " — abnormal"
+                            : ""
+                      }${
                         task!.completed_by_name ? ` · ${task!.completed_by_name}` : ""
                       } · ${s.label}`
                     : overdue
@@ -96,9 +109,11 @@ export function RoutineTimetable({
                   const cellCls = cn(
                     "flex h-9 w-full min-w-[3.5rem] flex-col items-center justify-center rounded-md border text-xs font-medium tabular-nums",
                     filled
-                      ? task!.abnormal
+                      ? severity === "critical"
                         ? "border-red-300 bg-red-50 text-red-700"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : severity === "abnormal"
+                          ? "border-orange-300 bg-orange-50 text-orange-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : overdue
                         ? "border-amber-300 bg-amber-50 text-amber-600"
                         : "border-dashed border-slate-200 bg-white text-slate-300",
@@ -109,7 +124,7 @@ export function RoutineTimetable({
                     <>
                       <span>{stripUnit(task!.completion_value as string)}</span>
                       {readOnly && task!.completed_by_name && (
-                        <span className="max-w-[3.5rem] truncate text-[10px] font-normal leading-none text-emerald-600">
+                        <span className="max-w-[3.5rem] truncate text-[10px] font-normal leading-none text-current opacity-70">
                           {task!.completed_by_name}
                         </span>
                       )}
@@ -154,7 +169,7 @@ export function RoutineTimetable({
         Today&apos;s routine vitals (q4h).{" "}
         {readOnly
           ? "Read-only — value · nurse."
-          : "Tap a cell to chart — abnormal values turn red, overdue slots amber."}
+          : "Tap a cell to chart — mildly abnormal values turn orange, critical values red (auto-escalated), overdue slots amber."}
       </p>
     </div>
   );

@@ -16,6 +16,9 @@ interface AlertEntry {
   patientId?: string;
   text: string;
   at: string;
+  // Critical-vital auto-escalations go to BOTH the attending and the MO, so
+  // they're labelled by severity, not "to attending".
+  critical: boolean;
 }
 
 function timeLabel(d: string): string {
@@ -41,6 +44,7 @@ function toEntry(row: AlertRow): AlertEntry {
     patientId,
     text,
     at: timeLabel(row.created_at),
+    critical: meta.severity === "critical",
   };
 }
 
@@ -135,7 +139,9 @@ export function DoctorAlerts({
             title:
               entry.action === "break_glass_view"
                 ? "🔓 Break-glass record access"
-                : "🔔 Escalation to attending",
+                : entry.critical
+                  ? "🚨 Critical vital — auto-escalation"
+                  : "🔔 Escalation to attending",
             description: `${entry.who} — ${where}${
               entry.text ? ` — “${entry.text}”` : ""
             }`,
@@ -188,7 +194,9 @@ export function DoctorAlerts({
                   {" · "}
                   {e.action === "break_glass_view"
                     ? "opened a masked record"
-                    : "escalated"}
+                    : e.critical
+                      ? "auto-escalated (critical vital)"
+                      : "escalated"}
                   {p ? ` — Bed ${p.bed_number} · ${p.full_name}` : ""}
                 </p>
                 <p className="text-slate-500">

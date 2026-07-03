@@ -96,6 +96,8 @@ function medDescription(m: Medication): string {
   const duration = m.duration?.trim();
   if (duration && !/^(as charted|stat|n\/?a|-)$/i.test(duration)) {
     desc += ` × ${duration}`;
+  } else if (!duration && !/\bstat\b|\bonce\b/i.test(m.frequency ?? "")) {
+    desc += " · ongoing";
   }
   return desc;
 }

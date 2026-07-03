@@ -83,6 +83,10 @@ function medicationDescription(m: Medication): string {
   const duration = m.duration?.trim();
   if (duration && !/^(as charted|stat|n\/?a|-)$/i.test(duration)) {
     desc += ` × ${duration}`;
+  } else if (!duration && !/\bstat\b|\bonce\b/i.test(m.frequency ?? "")) {
+    // No duration = an ongoing (maintenance) order — say so on the MAR rather
+    // than leaving the nurse to guess whether a course length was forgotten.
+    desc += " · ongoing";
   }
   // Advisory administration instruction (Workstream E) — folded into the MAR row
   // label so the nurse sees "with food" / "empty stomach" at give-time. Advisory
@@ -90,6 +94,23 @@ function medicationDescription(m: Medication): string {
   const admin = m.admin_instruction?.trim();
   if (admin) desc += ` · ${admin}`;
   return desc || m.drug;
+}
+
+// A nurse task that merely restates a dispatched medication ("Administer
+// Augmentin") duplicates the MAR — the give-time grid already charts every dose,
+// and any post-dose follow-up fires when the nurse signs the cell. Gate on the
+// medication classification, then match the drug's distinctive tokens (token-wise,
+// so "Administer Actrapid insulin" matches the drug "Insulin Actrapid").
+function isMedCovered(taskText: string, medications: Medication[]): boolean {
+  if (classifyTask(taskText) !== "medication") return false;
+  const t = taskText.toLowerCase();
+  return medications.some((m) =>
+    (m.drug ?? "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((tok) => tok.length >= 3)
+      .some((tok) => t.includes(tok)),
+  );
 }
 
 export async function POST(req: Request) {
@@ -296,9 +317,12 @@ export async function POST(req: Request) {
   // Observation routing (Workstream B): drop tasks that are just a routine grid vital
   // on its routine cadence — the timetable already charts those, so a separate
   // worklist task is redundant. Conditional / event-timed vitals and non-routine
-  // observations (glucose) still materialise. The note's authored nurse_tasks list is
-  // untouched — this only affects which task rows get created.
-  const materialisedNurseTasks = nurseTasks.filter((t) => !isRoutineCovered(t));
+  // observations (glucose) still materialise. Same for "administer X" tasks that
+  // restate a dispatched medication — the MAR is their home. The note's authored
+  // nurse_tasks list is untouched — this only affects which task rows get created.
+  const materialisedNurseTasks = nurseTasks.filter(
+    (t) => !isRoutineCovered(t) && !isMedCovered(t.task, medications),
+  );
 
   const nurseRows = materialisedNurseTasks.map((t) => {
     const { scheduledFor, label } = parseWhen(t.when);

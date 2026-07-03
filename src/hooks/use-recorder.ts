@@ -72,10 +72,16 @@ export function useRecorder(): UseRecorder {
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const supported =
-    typeof navigator !== "undefined" &&
-    !!navigator.mediaDevices?.getUserMedia &&
-    typeof MediaRecorder !== "undefined";
+  // Feature-detect in an effect, not inline: SSR has no `navigator`, so an
+  // inline check renders disabled on the server and enabled on the client —
+  // a hydration mismatch (the dev-overlay "disabled did not match" error).
+  const [supported, setSupported] = useState(false);
+  useEffect(() => {
+    setSupported(
+      !!navigator.mediaDevices?.getUserMedia &&
+        typeof MediaRecorder !== "undefined",
+    );
+  }, []);
 
   const clearTimer = () => {
     if (timerRef.current) {

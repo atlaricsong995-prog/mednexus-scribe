@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Mic, Square, RotateCcw, Sparkles } from "lucide-react";
+import { Mic, Square, RotateCcw, Sparkles, Keyboard } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PulseLoader } from "@/components/pulse-loader";
@@ -55,6 +55,11 @@ export function Recorder({ patientId }: { patientId: string }) {
   const [phase, setPhase] = useState<Phase>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [note, setNote] = useState<NoteReviewData | null>(null);
+  // Input mode: dictate (mic → Whisper) or type the note directly. Typed text
+  // skips transcription and feeds the same extract pipeline — it doubles as the
+  // fallback when the mic/browser lets us down.
+  const [mode, setMode] = useState<"voice" | "typed">("voice");
+  const [typedNote, setTypedNote] = useState("");
 
   const busy =
     phase === "uploading" || phase === "transcribing" || phase === "analyzing";
@@ -109,16 +114,117 @@ export function Recorder({ patientId }: { patientId: string }) {
     }
   }
 
+  // Typed-note pipeline: no upload/transcribe — straight to extraction. The
+  // server persists the typed text in the audit trail (no transcriptions row).
+  async function runTypedPipeline() {
+    const text = typedNote.trim();
+    if (!text) return;
+    try {
+      setPhase("analyzing");
+      const eRes = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ typedText: text, patientId }),
+      });
+      const eData = await eRes.json();
+      if (!eRes.ok) throw new Error(eData.error ?? "Extraction failed.");
+
+      setNote(eData as NoteReviewData);
+      setPhase("done");
+    } catch (err) {
+      setPhase("error");
+      toast({
+        variant: "destructive",
+        title: "Pipeline failed",
+        description: err instanceof Error ? err.message : "Unknown error.",
+      });
+    }
+  }
+
   function startOver() {
     setPhase(null);
     setTranscript(null);
     setNote(null);
+    setTypedNote("");
     reset();
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* Voice ⇄ type switch — only before a take/typed run is in flight */}
+        {status === "idle" && phase === null && (
+          <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setMode("voice")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 transition",
+                mode === "voice"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700",
+              )}
+            >
+              <Mic className="h-3.5 w-3.5" /> Dictate
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("typed")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 transition",
+                mode === "typed"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700",
+              )}
+            >
+              <Keyboard className="h-3.5 w-3.5" /> Type
+            </button>
+          </div>
+        )}
+
+        {mode === "typed" ? (
+          <div className="flex w-full flex-col items-center gap-3">
+            <textarea
+              value={typedNote}
+              onChange={(e) => setTypedNote(e.target.value)}
+              disabled={busy || phase === "done"}
+              rows={6}
+              placeholder="Type your ward-round note — history, examination findings, assessment and plan…"
+              className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:bg-slate-50 disabled:text-slate-500"
+            />
+            {phase === null && (
+              <Button onClick={runTypedPipeline} disabled={!typedNote.trim()}>
+                <Sparkles className="h-4 w-4" />
+                Analyze note
+              </Button>
+            )}
+            {busy && (
+              <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                <PulseLoader className="text-current" />
+                Extracting clinical note…
+              </div>
+            )}
+            {phase === "error" && (
+              <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
+                <Button onClick={runTypedPipeline}>
+                  <RotateCcw className="h-4 w-4" />
+                  Retry
+                </Button>
+                <Button variant="outline" onClick={startOver}>
+                  <Keyboard className="h-4 w-4" />
+                  Start over
+                </Button>
+              </div>
+            )}
+            {phase === "done" && (
+              <Button variant="outline" size="sm" onClick={startOver}>
+                <Keyboard className="h-4 w-4" />
+                New note
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
         {/* Mic button (hidden once reviewing) */}
         {status !== "review" && (
           <button
@@ -213,6 +319,8 @@ export function Recorder({ patientId }: { patientId: string }) {
         )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
+          </>
+        )}
       </div>
 
       {/* English transcript preview */}

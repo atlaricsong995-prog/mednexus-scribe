@@ -21,30 +21,44 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  let body: { transcriptionId?: string; patientId?: string };
+  let body: { transcriptionId?: string; patientId?: string; typedText?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
+  // Two input modes share this pipeline: a saved Whisper transcription
+  // (transcriptionId) or a note the doctor typed directly (typedText). Typed
+  // notes skip transcribe entirely; everything downstream (extraction, safety
+  // flags, right-patient check) is identical.
   const { transcriptionId, patientId } = body;
-  if (!transcriptionId || !patientId) {
+  const typedText = body.typedText?.trim() || undefined;
+  if (!patientId || (!transcriptionId && !typedText)) {
     return NextResponse.json(
-      { error: "Missing transcriptionId or patientId." },
+      { error: "Missing patientId, and one of transcriptionId or typedText." },
+      { status: 400 },
+    );
+  }
+  if (typedText && typedText.length > 10_000) {
+    return NextResponse.json(
+      { error: "Typed note is too long (max 10,000 characters)." },
       { status: 400 },
     );
   }
 
   const supabase = createAdminClient();
 
-  // Fetch transcript + patient context server-side (don't trust the client).
+  // Fetch transcript + patient context server-side (don't trust the client for
+  // dictations — the saved transcription row is canonical).
   const [{ data: transcription }, { data: patient }] = await Promise.all([
-    supabase
-      .from("transcriptions")
-      .select("id, raw_text")
-      .eq("id", transcriptionId)
-      .maybeSingle(),
+    transcriptionId
+      ? supabase
+          .from("transcriptions")
+          .select("id, raw_text")
+          .eq("id", transcriptionId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
     supabase
       .from("patients")
       .select("id, full_name, age, diagnosis, allergies, bed_number, mrn, ward")
@@ -52,7 +66,7 @@ export async function POST(req: Request) {
       .maybeSingle(),
   ]);
 
-  if (!transcription) {
+  if (transcriptionId && !transcription) {
     return NextResponse.json(
       { error: "Transcription not found." },
       { status: 404 },
@@ -62,10 +76,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Patient not found." }, { status: 404 });
   }
 
+  const rawText = transcription?.raw_text ?? typedText!;
+
   // Gemini extraction (Zod-validated + one retry inside extractNote).
   let extracted;
   try {
-    extracted = await extractNote(transcription.raw_text, {
+    extracted = await extractNote(rawText, {
       name: patient.full_name,
       age: patient.age,
       diagnosis: patient.diagnosis,
@@ -93,7 +109,7 @@ export async function POST(req: Request) {
       .eq("ward", patient.ward)
       .eq("active", true);
     patientCheck = crossCheckPatient(
-      transcription.raw_text,
+      rawText,
       {
         id: patient.id,
         full_name: patient.full_name,
@@ -110,7 +126,7 @@ export async function POST(req: Request) {
     .from("clinical_notes")
     .insert({
       patient_id: patientId,
-      transcription_id: transcriptionId,
+      transcription_id: transcriptionId ?? null,
       doctor_id: DEMO_DOCTOR_ID,
       medical_note: extracted.medical_note,
       medications: extracted.medications,
@@ -137,7 +153,11 @@ export async function POST(req: Request) {
     entity_type: "clinical_note",
     entity_id: note.id,
     metadata: {
-      transcription_id: transcriptionId,
+      transcription_id: transcriptionId ?? null,
+      input_mode: transcriptionId ? "dictated" : "typed",
+      // Typed notes have no transcriptions row — keep the verbatim source text
+      // in the audit trail so the note stays traceable to its input.
+      ...(typedText ? { typed_text: typedText } : {}),
       patient_id: patientId,
       safety_flag_count: extracted.safety_flags.length,
       patient_check: patientCheck?.status ?? null,

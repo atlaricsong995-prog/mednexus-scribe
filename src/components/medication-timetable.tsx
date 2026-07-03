@@ -105,9 +105,11 @@ export function MedicationTimetable({
         <tbody>
           {rowList.map((row) => (
             <tr key={row.medKey}>
+              {/* No nowrap here — long orders ("Augmentin 1 g PO TDS for 5 days…")
+                  must wrap, or this column forces the whole MAR to side-scroll. */}
               <td
                 className={cn(
-                  "whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium",
+                  "min-w-[9rem] rounded-md px-2 py-1 text-xs font-medium",
                   row.safetyAlert
                     ? "bg-red-50 text-red-800"
                     : "text-slate-700",

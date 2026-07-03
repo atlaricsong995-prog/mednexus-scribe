@@ -31,7 +31,7 @@ export function AppShell({
     <div className="min-h-screen bg-background">
       {/* Dark chrome top bar */}
       <header className="sticky top-0 z-30 bg-chrome text-chrome-foreground shadow-sm">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-4">
+        <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-4 px-4">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <span className="flex h-7 w-7 items-center justify-center rounded-md bg-glow/15 text-glow">
               <Activity className="h-4 w-4" />
@@ -56,7 +56,7 @@ export function AppShell({
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl">
+      <div className="mx-auto flex w-full max-w-7xl">
         {/* Optional slim side rail — collapses to icons under lg */}
         {navItems && navItems.length > 0 ? (
           <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 flex-col gap-1 bg-chrome/95 px-2 py-4 text-chrome-foreground sm:flex">

@@ -24,11 +24,14 @@ export default async function MoPage({
   const role = getRole();
   const bed = searchParams.bed ?? null;
 
-  // Ward data + the escalation/break-glass inbox backfill. Critical-vital
-  // auto-escalations reach the MO (first responder) here as well as the attending.
+  // Ward data + the escalation inbox backfill. Critical-vital auto-escalations
+  // reach the MO (first responder) here as well as the attending. Break-glass
+  // record-access alerts are the attending's oversight duty — not shown to the MO.
   const [{ patients, tasks }, initialAlerts] = await Promise.all([
     getWardData(WARD),
-    getRecentAlerts(),
+    // Escalations only (break-glass is attending-only), minus the MO's own —
+    // you don't get notified of an escalation you raised yourself.
+    getRecentAlerts(["escalation"], "mo"),
   ]);
 
   const data = bed ? await getPatientWindowData(WARD, bed, role) : null;
@@ -43,7 +46,12 @@ export default async function MoPage({
         { label: "My Patients", href: "/mo", icon: LayoutDashboard, active: true },
       ]}
     >
-      <DoctorAlerts patients={patients} initialAlerts={initialAlerts} />
+      <DoctorAlerts
+        patients={patients}
+        initialAlerts={initialAlerts}
+        kinds={["escalation"]}
+        excludeActorRole="mo"
+      />
 
       <WardWorklist
         ward={WARD}

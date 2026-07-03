@@ -13,7 +13,17 @@ export interface AlertRow {
   created_at: string;
 }
 
-export async function getRecentAlerts(limit = 20): Promise<AlertRow[]> {
+export type AlertKind = "break_glass_view" | "escalation";
+
+// `kinds` scopes the inbox to the viewer's role: break-glass record-access
+// alerts are the attending's to review, so the MO inbox requests escalations only.
+// `excludeActorRole` keeps a viewer from being notified of their own actions —
+// the MO's escalation goes to the attending, not back into the MO's inbox.
+export async function getRecentAlerts(
+  kinds: AlertKind[] = ["break_glass_view", "escalation"],
+  excludeActorRole?: string,
+  limit = 20,
+): Promise<AlertRow[]> {
   const supabase = createAdminClient();
   // Acknowledged alerts are append-only `alert_ack` rows that reference the original
   // alert via entity_id. Pull the acked ids first so the backfill hides anything a
@@ -22,7 +32,7 @@ export async function getRecentAlerts(limit = 20): Promise<AlertRow[]> {
     supabase
       .from("audit_log")
       .select("id, actor_role, action, entity_id, metadata, created_at")
-      .in("action", ["break_glass_view", "escalation"])
+      .in("action", kinds)
       .order("created_at", { ascending: false })
       .limit(limit),
     supabase.from("audit_log").select("entity_id").eq("action", "alert_ack"),
@@ -30,5 +40,9 @@ export async function getRecentAlerts(limit = 20): Promise<AlertRow[]> {
   const ackedIds = new Set(
     (acks ?? []).map((a) => a.entity_id).filter((id): id is string => !!id),
   );
-  return ((data as AlertRow[]) ?? []).filter((row) => !ackedIds.has(row.id));
+  return ((data as AlertRow[]) ?? []).filter(
+    (row) =>
+      !ackedIds.has(row.id) &&
+      (!excludeActorRole || row.actor_role !== excludeActorRole),
+  );
 }

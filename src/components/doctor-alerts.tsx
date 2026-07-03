@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { buildPatientMap, type PatientLite } from "@/lib/tasks";
-import type { AlertRow } from "@/lib/server/alerts-data";
+import type { AlertKind, AlertRow } from "@/lib/server/alerts-data";
 
 interface AlertEntry {
   id: string;
@@ -51,9 +51,17 @@ function toEntry(row: AlertRow): AlertEntry {
 export function DoctorAlerts({
   patients,
   initialAlerts,
+  kinds = ["break_glass_view", "escalation"],
+  excludeActorRole,
 }: {
   patients: PatientLite[];
   initialAlerts: AlertRow[];
+  // Which alert kinds this viewer receives. Break-glass record-access alerts
+  // are attending-only; the MO inbox passes ["escalation"].
+  kinds?: AlertKind[];
+  // Don't notify a viewer of their own actions — the MO inbox passes "mo" so
+  // the MO's escalation reaches only the attending.
+  excludeActorRole?: string;
 }) {
   const { toast } = useToast();
   const patientMap = useMemo(() => buildPatientMap(patients), [patients]);
@@ -88,7 +96,12 @@ export function DoctorAlerts({
     }
   }
 
+  // Primitive key so the subscription effect doesn't re-run on every render
+  // (the `kinds` default is a fresh array each time).
+  const kindsKey = kinds.join(",");
+
   useEffect(() => {
+    const allowed = new Set(kindsKey.split(","));
     const supabase = createClient();
     const channel = supabase
       .channel("audit:doctor-alerts")
@@ -105,11 +118,8 @@ export function DoctorAlerts({
             }
             return;
           }
-          if (
-            row.action !== "break_glass_view" &&
-            row.action !== "escalation"
-          )
-            return;
+          if (!allowed.has(row.action)) return;
+          if (excludeActorRole && row.actor_role === excludeActorRole) return;
           const entry = toEntry(row);
           setEntries((prev) =>
             prev.some((e) => e.id === entry.id)
@@ -137,7 +147,7 @@ export function DoctorAlerts({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [patientMap, toast]);
+  }, [patientMap, toast, kindsKey, excludeActorRole]);
 
   if (entries.length === 0) return null;
 
@@ -145,8 +155,10 @@ export function DoctorAlerts({
     <section className="mb-6 rounded-xl border border-red-200 bg-red-50/60 p-4">
       <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-red-800">
         <ShieldAlert className="h-4 w-4" />
-        {entries.length} alert{entries.length === 1 ? "" : "s"} — break-glass &
-        escalations
+        {entries.length} alert{entries.length === 1 ? "" : "s"} —{" "}
+        {kinds.includes("break_glass_view")
+          ? "break-glass & escalations"
+          : "escalations"}
       </h2>
       <ul className="space-y-1.5">
         {entries.map((e) => {

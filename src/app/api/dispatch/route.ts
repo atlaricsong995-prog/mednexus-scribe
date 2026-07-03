@@ -17,8 +17,14 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_DOCTOR_ID } from "@/lib/constants";
 import { checkMedicationSafety } from "@/lib/safety";
-import { medKey, todayMedSlots } from "@/lib/clinical/vocab";
-import { isRoutineCovered } from "@/lib/clinical/obs-routing";
+import {
+  DEFAULT_ROUTINE,
+  isObsType,
+  medKey,
+  todayMedSlots,
+  type ObsType,
+} from "@/lib/clinical/vocab";
+import { isRecurringWhen, isRoutineCovered } from "@/lib/clinical/obs-routing";
 import { ExtractSchema } from "@/lib/ai/schemas";
 import type {
   Medication,
@@ -324,10 +330,10 @@ export async function POST(req: Request) {
     (t) => !isRoutineCovered(t) && !isMedCovered(t.task, medications),
   );
 
-  const nurseRows = materialisedNurseTasks.map((t) => {
+  const nurseRows = materialisedNurseTasks.flatMap((t) => {
     const { scheduledFor, label } = parseWhen(t.when);
     const description = label ? `${t.task} (${label})` : t.task;
-    return {
+    const base = {
       note_id: noteId,
       patient_id: note.patient_id,
       ward: patient.ward,
@@ -338,11 +344,24 @@ export async function POST(req: Request) {
       obs_type: t.obs_type ?? null,
       routine_key: null as string | null,
       med_key: null as string | null,
-      scheduled_for: scheduledFor,
       conditions: t.conditions ?? null,
       safety_alert: null as string | null,
       priority: t.priority,
     };
+    // Non-grid observations (glucose/rr) have no timetable row, so a recurring order
+    // ("BSL QDS") must fan out into one task PER occurrence — four checks are four
+    // completable items, not one. Reuses the MAR slot table: its token matching
+    // resolves free text like "QDS — pre-meals and bedtime" to real give-times.
+    // No resolvable slots → single task (status quo).
+    const nonGridObs =
+      isObsType(t.obs_type) && !(DEFAULT_ROUTINE as ObsType[]).includes(t.obs_type);
+    if (nonGridObs && isRecurringWhen(t.when)) {
+      const slots = todayMedSlots(t.when);
+      if (slots.length > 0) {
+        return slots.map((s) => ({ ...base, scheduled_for: s.iso as string | null }));
+      }
+    }
+    return [{ ...base, scheduled_for: scheduledFor }];
   });
 
   const taskRows = [...medicationRows, ...nurseRows];

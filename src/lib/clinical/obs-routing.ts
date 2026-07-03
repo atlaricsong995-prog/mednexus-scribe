@@ -1,16 +1,24 @@
 // Observation routing (Workstream B) — deterministic, NO LLM (mirrors lib/safety.ts).
 //
-// The routine timetable already charts the universal standing vitals (bp/hr/temp/
-// spo2, q4h) for every patient. So a dictated observation that is just one of those
-// vitals on its routine cadence is ALREADY covered by the grid — materialising it as
-// a separate worklist task is redundant noise. This module decides which extracted
-// nurse_tasks to suppress from materialisation:
+// Three homes for a dictated observation (obs-routing redesign, 2026-07-03):
+//   Routine timetable    = the universal standing vitals grid (bp/hr/temp/spo2, q4h)
+//                          every patient already has — the nurse charts HERE.
+//   Special Instructions = standing patient-specific watch orders on those same grid
+//                          vitals (denser cadence "SpO₂ Q2H", tighter thresholds,
+//                          escalation conditions) — display-only; NO task row, the
+//                          reading still lands in the grid.
+//   Outstanding tasks    = execute-once items: complete → gone.
 //
-//   * routine vital + no special timing/condition  -> SUPPRESS (grid covers it)
-//   * routine vital WITH special timing/condition   -> keep (Special Instruction, e.g.
-//                                                      "BP 1h post-antihypertensive")
-//   * non-routine observation (glucose, etc.)       -> keep (chartable + Special Instr.)
-//   * non-observation tasks (procedures, etc.)      -> keep
+// So for extracted nurse_tasks this module suppresses:
+//
+//   * grid vital, plain / recurring cadence / conditional -> SUPPRESS (grid charts it;
+//                                                            Special Instructions shows
+//                                                            the standing order)
+//   * grid vital tied to a one-off EVENT ("BP 1h after     -> keep (a real execute-once
+//     dose", "once", "stat")                                  task)
+//   * non-grid observation (glucose, rr)                   -> keep (task list is its
+//                                                              only chartable home)
+//   * non-observation tasks (procedures, etc.)             -> keep
 //
 // Suppression only removes the redundant task ROW; the doctor's authored nurse_tasks
 // list on the note is untouched.
@@ -44,24 +52,41 @@ function detectRoutineObs(task: NurseTask): ObsType | null {
   return null;
 }
 
-// A `when` is "special" when it ties the observation to an event or condition rather
-// than a plain routine cadence (q4h / qds / bd / daily / routine). Event/conditional
-// language ("after", "post", "1 hour", "if", "stat") means it belongs in Special
-// Instructions, not the grid.
-const SPECIAL_WHEN =
-  /\b(after|post|pre|before|prior|following|once|if|when|stat|now|hourly|q1h|q2h|\d+\s*(min|minute|hour|hr))\b/i;
+// A recurring cadence ("q2h", "hourly", "QDS", "every 2 hours") is a STANDING order —
+// the nurse keeps charting in the grid at that rhythm, guided by Special Instructions.
+// Checked BEFORE the one-off regex so "every 2 hours" isn't misread as event timing.
+const RECURRING_WHEN =
+  /\b(q\s?\d+\s?h|hourly|every\s+\d+\s*(?:min(?:ute)?|h(?:ou)?r)s?|od|bd|bid|tds|tid|qds|qid|daily|nocte|continuous)\b/i;
 
-function hasSpecialTiming(when: string | null | undefined): boolean {
+// A one-off EVENT anchor ("1 hour after dose", "before transfer", "once", "stat")
+// means a single measurement someone must remember to execute — that's a real task.
+const ONE_OFF_WHEN =
+  /\b(after|post|pre|before|prior|following|once|stat|now)\b|\b(?:in\s+)?\d+\s*(?:min(?:ute)?|h(?:ou)?r)s?\b/i;
+
+// True when the `when` reads as a recurring cadence rather than a one-off event.
+// Dispatch also uses this to fan non-grid observations out per-occurrence.
+export function isRecurringWhen(when: string | null | undefined): boolean {
   const w = (when ?? "").trim();
-  if (!w) return false;
-  return SPECIAL_WHEN.test(w);
+  return !!w && RECURRING_WHEN.test(w);
 }
 
-// True when the task is a routine grid vital on its routine cadence — redundant with
-// the timetable, so it should NOT be materialised as a separate worklist task.
+// True when the task is a routine grid vital whose home is the timetable + Special
+// Instructions — plain cadence, recurring cadence, or a standing condition. It should
+// NOT be materialised as a worklist task. Only a one-off event-timed measurement
+// ("BP 1 hour after dose") escapes: that is a genuine execute-once task.
 export function isRoutineCovered(task: NurseTask): boolean {
   if (detectRoutineObs(task) === null) return false;
-  if (task.conditions?.trim()) return false; // conditional -> Special Instruction
-  if (hasSpecialTiming(task.when)) return false; // event-timed -> Special Instruction
-  return true;
+  const w = (task.when ?? "").trim();
+  if (isRecurringWhen(w)) return true; // standing cadence -> Special Instructions
+  if (ONE_OFF_WHEN.test(w)) return false; // event-timed one-off -> keep as task
+  return true; // plain routine (with or without conditions) -> grid covers it
+}
+
+// Suppressed grid vitals that still carry patient-specific content (a cadence, a
+// timing note, or an escalation condition) must surface in Special Instructions —
+// otherwise suppressing the task would erase the order from both places. A bare
+// "monitor vitals" (no when, no conditions) adds nothing over the grid and stays out.
+export function isGridSpecialInstruction(task: NurseTask): boolean {
+  if (!isRoutineCovered(task)) return false;
+  return !!(task.when?.trim() || task.conditions?.trim());
 }

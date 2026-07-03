@@ -9,6 +9,7 @@ import {
   getTodayMedTasks,
 } from "@/lib/server/routine";
 import { canViewRecord } from "@/lib/server/role";
+import { isGridSpecialInstruction } from "@/lib/clinical/obs-routing";
 import { checkMedicationSafety } from "@/lib/safety";
 import type { NoteReviewData } from "@/components/note-review-panel";
 import type {
@@ -165,8 +166,13 @@ export async function getPatientWindowData(
   // ward-round note archives the previous record, but its standing orders (glucose
   // monitoring, wound checks…) don't stop existing — aggregate qualifying tasks
   // from the current note plus the archived timeline (newest first), deduped.
+  // Suppressed grid-vital orders (e.g. a normal-priority "SpO₂ Q2H") get no task row,
+  // so Special Instructions is their ONLY home — admit them regardless of priority.
   const qualifies = (t: NurseTask) =>
-    !!t.conditions || t.priority === "high" || t.priority === "critical";
+    !!t.conditions ||
+    t.priority === "high" ||
+    t.priority === "critical" ||
+    isGridSpecialInstruction(t);
   const watchFor: NurseTask[] = [];
   const seen = new Set<string>();
   for (const n of [currentNote, ...fullHistory]) {

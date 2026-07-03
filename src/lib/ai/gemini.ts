@@ -22,9 +22,13 @@ import {
 } from "@/lib/clinical/vocab";
 import { ExtractSchema, type ExtractResult } from "./schemas";
 
+// Deliberately NO demographics (age/gender): the open chart may be the WRONG
+// patient (the right-patient check + retarget flow exists precisely for that),
+// and Gemini was weaving the chart's age into the HPI ("54-year-old…") even when
+// the dictation never said it. Identification uses name only; age must come from
+// the doctor's spoken words or not appear at all.
 export interface PatientContext {
   name: string;
-  age: number | null;
   diagnosis: string | null;
   allergies: string[];
 }
@@ -128,7 +132,6 @@ Read a transcribed doctor's voice note and output structured JSON.
 
 CONTEXT:
 - Patient name: ${ctx.name}
-- Age: ${ctx.age ?? "unknown"}
 - Known diagnosis: ${ctx.diagnosis ?? "none recorded"}
 - Allergies: ${ctx.allergies.length ? ctx.allergies.join(", ") : "NKDA"}
 - Now (ISO): ${nowIso}
@@ -138,7 +141,9 @@ RULES:
 2. EXTRACT ONLY what the doctor actually dictated in the transcript. Do NOT invent or infer
    medications, diagnoses, history, or tasks from the patient context. The patient context is
    for identification and the safety check ONLY — never copy it into the note as if it were
-   dictated, and never add regular/home medications that were not spoken.
+   dictated, and never add regular/home medications that were not spoken. NEVER state the
+   patient's age, gender, or other demographics unless the doctor spoke them in the
+   transcript (no "54-year-old woman" openers invented from context).
 3. Use Malaysian medical conventions (e.g. "BD" not "BID", "TDS" not "TID").
    ALL output text MUST be in English only. If the transcript contains Malay or
    Chinese words, translate them to standard English medical terms (e.g. darah

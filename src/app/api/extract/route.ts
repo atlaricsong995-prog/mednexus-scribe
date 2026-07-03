@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       : Promise.resolve({ data: null }),
     supabase
       .from("patients")
-      .select("id, full_name, age, diagnosis, allergies, bed_number, mrn, ward")
+      .select("id, full_name, diagnosis, allergies, bed_number, mrn, ward")
       .eq("id", patientId)
       .maybeSingle(),
   ]);
@@ -83,7 +83,6 @@ export async function POST(req: Request) {
   try {
     extracted = await extractNote(rawText, {
       name: patient.full_name,
-      age: patient.age,
       diagnosis: patient.diagnosis,
       allergies: patient.allergies ?? [],
     });

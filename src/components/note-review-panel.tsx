@@ -13,6 +13,7 @@ import {
   UserCheck,
   UserX,
   ArrowRightLeft,
+  Info,
 } from "lucide-react";
 
 import { useToast } from "@/hooks/use-toast";
@@ -297,6 +298,17 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
           </span>
         </div>
       )}
+      {/* Unverified is shown too (neutral) — a silent check is indistinguishable
+          from a broken one, so tell the doctor no identifier was heard. */}
+      {check && check.status === "unverified" && (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          <UserCheck className="h-4 w-4 shrink-0" />
+          <span>
+            Right-patient check: no bed, MRN or name heard in the dictation —
+            please confirm this is {check.openLabel}.
+          </span>
+        </div>
+      )}
 
       {/* Card 1 — Clinical note */}
       <Card className="border-slate-200">
@@ -412,8 +424,8 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                  <div className="col-span-2 sm:col-span-1">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-7">
+                  <div className="col-span-2 sm:col-span-2">
                     <FieldLabel>Drug</FieldLabel>
                     <Input
                       value={m.drug}
@@ -421,7 +433,7 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
                       className="bg-white"
                     />
                   </div>
-                  <div>
+                  <div className="sm:col-span-2">
                     <FieldLabel>Dose</FieldLabel>
                     <div className="flex gap-1">
                       <Input
@@ -431,7 +443,7 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
                         onChange={(e) =>
                           updateDose(i, e.target.value, doseUnit)
                         }
-                        className="bg-white"
+                        className="min-w-0 flex-1 bg-white"
                       />
                       <select
                         value={doseUnit}
@@ -485,6 +497,7 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
                     <Input
                       value={m.duration}
                       onChange={(e) => updateMed(i, "duration", e.target.value)}
+                      placeholder="Ongoing"
                       className="bg-white"
                     />
                   </div>
@@ -512,6 +525,19 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
                     </select>
                   </div>
                 </div>
+
+                {/* Missing duration is a decision, not an omission: it dispatches
+                    as an ongoing order (right for maintenance meds like metformin,
+                    wrong for an antibiotic course) — tell the doctor which one
+                    they're signing. One-off/STAT orders are exempt. */}
+                {!m.duration.trim() &&
+                  !/\bstat\b|\bonce\b/i.test(m.frequency) && (
+                    <p className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <Info className="h-3 w-3 shrink-0" />
+                      No duration — dispatches as an ongoing order. Add a course
+                      length (e.g. “5 days”) if this should stop.
+                    </p>
+                  )}
 
                 {/* Inline safety flags for THIS drug */}
                 {rowFlags.map((f, fi) => (

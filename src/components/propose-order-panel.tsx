@@ -163,8 +163,8 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
         </div>
 
         {isMed ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            <div className="col-span-2 sm:col-span-1">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-7">
+            <div className="col-span-2 sm:col-span-2">
               <FieldLabel>Drug</FieldLabel>
               <Input
                 value={drug}
@@ -172,13 +172,14 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
                 placeholder="e.g. Paracetamol"
               />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <FieldLabel>Dose</FieldLabel>
               <div className="flex gap-1">
                 <Input
                   value={doseValue}
                   inputMode="decimal"
                   placeholder="1"
+                  className="min-w-0 flex-1"
                   onChange={(e) => setDoseValue(e.target.value)}
                 />
                 <select

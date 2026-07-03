@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/client";
+import { isGridCell } from "@/lib/tasks";
 import type { Task } from "@/lib/supabase/types";
 
 // useRealtimeTasks(ward) — subscribes to INSERT/UPDATE on the tasks table for a
@@ -94,9 +95,45 @@ export function useRealtimeTasks(
         },
       )
       .subscribe((s) => {
-        if (s === "SUBSCRIBED") setStatus("subscribed");
-        else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") setStatus("error");
-        else if (s === "CLOSED") setStatus("closed");
+        if (s === "SUBSCRIBED") {
+          setStatus("subscribed");
+          // Re-sync from the DB every time the channel comes up. initialTasks
+          // are a server render that Next's client router cache can replay up to
+          // ~30s stale after a back-navigation — and any change that happened
+          // before the subscription was live never arrives as an event. Both
+          // leave zombies (e.g. an approved task still showing "awaiting
+          // approval"). Snapshot the same ad-hoc scope the pages fetch
+          // (ward-data.ts) and reconcile.
+          const snapshotAt = new Date().toISOString();
+          void supabase
+            .from("tasks")
+            .select("*")
+            .eq("ward", ward)
+            .is("routine_key", null)
+            .is("med_key", null)
+            .order("created_at", { ascending: false })
+            .then(({ data }) => {
+              if (!data || channelRef.current !== channel) return;
+              const fresh = data as Task[];
+              const freshIds = new Set(fresh.map((t) => t.id));
+              setTasks((prev) => [
+                // Keep rows the snapshot can't judge: grid cells (outside its
+                // scope) and inserts that raced the query. Ad-hoc rows missing
+                // from the snapshot were changed/removed server-side — drop
+                // their stale copy in favour of `fresh`.
+                ...prev.filter(
+                  (t) =>
+                    !freshIds.has(t.id) &&
+                    (isGridCell(t) || t.created_at > snapshotAt),
+                ),
+                ...fresh,
+              ]);
+            });
+        } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") {
+          setStatus("error");
+        } else if (s === "CLOSED") {
+          setStatus("closed");
+        }
         if (debug) {
           // eslint-disable-next-line no-console
           console.log(`[realtime] channel tasks:ward=${ward} → ${s}`);

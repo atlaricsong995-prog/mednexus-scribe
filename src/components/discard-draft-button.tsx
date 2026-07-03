@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,23 +12,29 @@ import { discardDraft } from "@/app/doctor/actions";
 // draft away so the recorder comes back for a fresh dictation.
 export function DiscardDraftButton({ noteId }: { noteId: string }) {
   const { toast } = useToast();
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function discard() {
     setBusy(true);
-    const res = await discardDraft(noteId);
-    if (res.ok) {
+    try {
+      const res = await discardDraft(noteId);
+      if (!res.ok) throw new Error(res.error);
       toast({
         title: "Draft discarded",
         description: "You can dictate or type a new note.",
       });
-      router.refresh();
-    } else {
+      // Full reload, not router.refresh(): the RSC refresh request can fail
+      // transiently (observed 503 in dev), which would leave the banner up
+      // forever. A hard reload always re-renders the bed page draft-free.
+      window.location.reload();
+    } catch (err) {
+      // Surface the failure and re-arm the button — a swallowed rejection here
+      // reads as a permanent spinner.
       toast({
         variant: "destructive",
         title: "Could not discard draft",
-        description: res.error,
+        description:
+          err instanceof Error ? err.message : "Unknown error — try again.",
       });
       setBusy(false);
     }

@@ -107,6 +107,9 @@ export function DoctorAlerts({
   useEffect(() => {
     const allowed = new Set(kindsKey.split(","));
     const supabase = createClient();
+    // Guards the async resync below — a late response must not write state
+    // after unmount (channel teardown does not cancel in-flight selects).
+    let cancelled = false;
     const channel = supabase
       .channel("audit:doctor-alerts")
       .on(
@@ -148,9 +151,54 @@ export function DoctorAlerts({
           });
         },
       )
-      .subscribe();
+      .subscribe((s) => {
+        if (s !== "SUBSCRIBED") return;
+        // Re-sync every time the channel comes up (same fix as the zombie-
+        // approvals resync in use-realtime.ts). A back-navigation replays this
+        // page from Next's client router cache — back/forward ignores
+        // staleTimes — so the component remounts with a pre-acknowledge
+        // initialAlerts snapshot; and any ack/alert that fired while it was
+        // unmounted never arrived as an event. Rebuild the same scope the
+        // server backfill uses (recent alerts minus acks) and reconcile.
+        void Promise.all([
+          supabase
+            .from("audit_log")
+            .select("id, actor_role, action, entity_id, metadata, created_at")
+            .in("action", kindsKey.split(","))
+            .order("created_at", { ascending: false })
+            .limit(20),
+          supabase
+            .from("audit_log")
+            .select("entity_id")
+            .eq("action", "alert_ack"),
+        ]).then(([{ data: alerts }, { data: acks }]) => {
+          if (cancelled) return;
+          const ackedIds = new Set(
+            (acks ?? [])
+              .map((a) => a.entity_id)
+              .filter((id): id is string => !!id),
+          );
+          const fresh = ((alerts as AlertRow[]) ?? [])
+            .filter(
+              (row) =>
+                !ackedIds.has(row.id) &&
+                (!excludeActorRole || row.actor_role !== excludeActorRole),
+            )
+            .map(toEntry);
+          setEntries((prev) => {
+            // Fresh snapshot wins; keep only un-acked rows it can't judge
+            // (older than its 20-row window, or inserts racing the query).
+            const freshIds = new Set(fresh.map((e) => e.id));
+            const keep = prev.filter(
+              (e) => !freshIds.has(e.id) && !ackedIds.has(e.id),
+            );
+            return [...fresh, ...keep].slice(0, 30);
+          });
+        });
+      });
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
   }, [patientMap, toast, kindsKey, excludeActorRole]);

@@ -18,6 +18,10 @@
 //     dose", "once", "stat")                                  task)
 //   * non-grid observation (glucose, rr)                   -> keep (task list is its
 //                                                              only chartable home)
+//   * standing WATCH order (conditions, not chartable,     -> SUPPRESS (Special
+//     no one-off event anchor) — "monitor wound, escalate     Instructions is its home;
+//     if swollen" (2026-07-04)                                a tickable task misreports
+//                                                             a continuous order as done)
 //   * non-observation tasks (procedures, etc.)             -> keep
 //
 // Suppression only removes the redundant task ROW; the doctor's authored nurse_tasks
@@ -89,4 +93,29 @@ export function isRoutineCovered(task: NurseTask): boolean {
 export function isGridSpecialInstruction(task: NurseTask): boolean {
   if (!isRoutineCovered(task)) return false;
   return !!(task.when?.trim() || task.conditions?.trim());
+}
+
+// A condition-gated pure notification ("Notify doctor if BSL > 10") orders no
+// measurable action — there is nothing to chart or complete against it, even
+// when the extractor tags an obs_type because the text names a vital.
+const NOTIFY_ONLY = /^(notify|escalate|inform|alert|call|contact)\b/i;
+
+// A standing WATCH order — "monitor the wound, escalate if swollen", "notify
+// doctor if BSL > 10" — is a continuous state of alertness, not an
+// execute-once item: a task row the nurse can tick "done" would misreport the
+// order as finished, so Special Instructions is its ONLY home (2026-07-04,
+// mirrors the grid-vital rule). Deliberately narrower than the watch-for
+// qualifier: suppression must only remove tasks Special Instructions will
+// actually show, so it requires an explicit condition ("dressing change
+// daily" has none, would vanish from both homes, and stays a task).
+// Chartable measurement orders (obs_type set and actually asking for a
+// reading — glucose QDS fan-out, "BSL stat") keep their rows: each reading is
+// genuinely completable. A one-off event anchor ("check wound 1 hour
+// post-op") is a real task too.
+export function isStandingWatchOnly(task: NurseTask): boolean {
+  if (!task.conditions?.trim()) return false;
+  // Condition-gated notifications are watches regardless of obs_type or when.
+  if (NOTIFY_ONLY.test(task.task.trim())) return true;
+  if (task.obs_type) return false;
+  return !ONE_OFF_WHEN.test((task.when ?? "").trim());
 }

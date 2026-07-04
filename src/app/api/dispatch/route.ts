@@ -24,7 +24,11 @@ import {
   todayMedSlots,
   type ObsType,
 } from "@/lib/clinical/vocab";
-import { isRecurringWhen, isRoutineCovered } from "@/lib/clinical/obs-routing";
+import {
+  isRecurringWhen,
+  isRoutineCovered,
+  isStandingWatchOnly,
+} from "@/lib/clinical/obs-routing";
 import { ExtractSchema } from "@/lib/ai/schemas";
 import type {
   Medication,
@@ -366,12 +370,17 @@ export async function POST(req: Request) {
 
   // Observation routing (Workstream B): drop tasks that are just a routine grid vital
   // on its routine cadence — the timetable already charts those, so a separate
-  // worklist task is redundant. Conditional / event-timed vitals and non-routine
-  // observations (glucose) still materialise. Same for "administer X" tasks that
-  // restate a dispatched medication — the MAR is their home. The note's authored
-  // nurse_tasks list is untouched — this only affects which task rows get created.
+  // worklist task is redundant. Same for "administer X" tasks that restate a
+  // dispatched medication (the MAR is their home) and for standing watch orders
+  // ("monitor wound, escalate if swollen" — Special Instructions is their home;
+  // 2026-07-04). Event-timed one-offs and chartable non-routine observations
+  // (glucose) still materialise. The note's authored nurse_tasks list is
+  // untouched — this only affects which task rows get created.
   const materialisedNurseTasks = nurseTasks.filter(
-    (t) => !isRoutineCovered(t) && !isMedCovered(t.task, medications),
+    (t) =>
+      !isRoutineCovered(t) &&
+      !isMedCovered(t.task, medications) &&
+      !isStandingWatchOnly(t),
   );
 
   const nurseRows = materialisedNurseTasks.flatMap((t) => {

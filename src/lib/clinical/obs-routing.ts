@@ -22,7 +22,7 @@
 //
 // Suppression only removes the redundant task ROW; the doctor's authored nurse_tasks
 // list on the note is untouched.
-import { DEFAULT_ROUTINE, isObsType, type ObsType } from "@/lib/clinical/vocab";
+import { DEFAULT_ROUTINE, isObsType, type ObsType } from "./vocab.ts";
 import type { NurseTask } from "@/lib/supabase/types";
 
 // Keyword fallback so we can still detect a routine vital when Gemini didn't tag

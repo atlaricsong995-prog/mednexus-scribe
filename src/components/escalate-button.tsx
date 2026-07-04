@@ -12,12 +12,20 @@ import { useToast } from "@/hooks/use-toast";
 // Instructions panel for nurses and residents. One tap writes an audit_log
 // 'escalation' row, which the attending's /doctor inbox picks up in realtime. This
 // replaces the old "treat the page as a completable task" workaround.
+// 2026-07-04: per-row usage — `context` carries the instruction text so the
+// attending sees WHICH order fired ("Bed 17 — Check wound…"), and `compact`
+// renders the icon-size row variant. The panel-level button (no context)
+// keeps serving escalations unrelated to any listed instruction.
 export function EscalateButton({
   patientId,
   bedNumber,
+  context,
+  compact = false,
 }: {
   patientId: string;
   bedNumber: string;
+  context?: string;
+  compact?: boolean;
 }) {
   const { toast } = useToast();
   const [sending, setSending] = useState(false);
@@ -26,10 +34,10 @@ export function EscalateButton({
   async function escalate() {
     setSending(true);
     try {
-      const res = await escalateToAttending(
-        patientId,
-        `Escalation from Bed ${bedNumber}`,
-      );
+      const message = context
+        ? `Bed ${bedNumber} — ${context}`
+        : `Escalation from Bed ${bedNumber}`;
+      const res = await escalateToAttending(patientId, message);
       if (!res.ok) throw new Error(res.error ?? "Escalation failed.");
       setDone(true);
       toast({
@@ -45,6 +53,27 @@ export function EscalateButton({
     } finally {
       setSending(false);
     }
+  }
+
+  if (compact) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={escalate}
+        disabled={sending || done}
+        title={done ? "Attending notified" : "Escalate this instruction"}
+        className="h-7 px-2 text-red-700 hover:bg-red-50"
+      >
+        {sending ? (
+          <PulseLoader className="text-current" />
+        ) : (
+          <BellRing className="h-3.5 w-3.5" />
+        )}
+        {done && <span className="text-xs">Sent</span>}
+        <span className="sr-only">Escalate this instruction</span>
+      </Button>
+    );
   }
 
   return (

@@ -7,6 +7,7 @@
 // notification to the attending doctor off this same audit row.
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRole } from "@/lib/server/role";
+import { instructionKey } from "@/lib/clinical/watch-for";
 import {
   getLatestConfirmedNote,
   getRecordHistory,
@@ -88,6 +89,52 @@ export async function escalateToAttending(
 
   if (error) {
     return { ok: false, error: `Could not escalate: ${error.message}` };
+  }
+  return { ok: true };
+}
+
+// Discontinue a Special Instruction (2026-07-04 spec). Attending-only — the
+// stop is symmetric with ordering authority; the MO deliberately has no path
+// here. One tap, no reason field (user decision): the append-only audit row
+// (who + when) is the accountability trail. computeWatchFor hides a key whose
+// latest discontinue postdates the newest note carrying it, so a later
+// re-order simply revives the instruction — new order beats old stop.
+export interface DiscontinueResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function discontinueInstruction(
+  patientId: string,
+  task: string,
+): Promise<DiscontinueResult> {
+  const role = getRole();
+  if (role !== "doctor") {
+    return {
+      ok: false,
+      error: "Only the attending doctor may discontinue an instruction.",
+    };
+  }
+  const label = task?.trim();
+  if (!patientId || !label) {
+    return { ok: false, error: "Missing patient or instruction." };
+  }
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("audit_log").insert({
+    actor_role: role,
+    action: "instruction_discontinued",
+    entity_type: "patient",
+    entity_id: patientId,
+    metadata: {
+      patient_id: patientId,
+      task_key: instructionKey(label),
+      task: label,
+      role,
+    },
+  });
+  if (error) {
+    return { ok: false, error: `Could not discontinue: ${error.message}` };
   }
   return { ok: true };
 }

@@ -9,7 +9,10 @@ import {
   getTodayMedTasks,
 } from "@/lib/server/routine";
 import { canViewRecord } from "@/lib/server/role";
-import { isGridSpecialInstruction } from "@/lib/clinical/obs-routing";
+import {
+  computeWatchFor,
+  type DiscontinueEvent,
+} from "@/lib/clinical/watch-for";
 import { checkMedicationSafety } from "@/lib/safety";
 import type { NoteReviewData } from "@/components/note-review-panel";
 import type {
@@ -95,6 +98,29 @@ async function getAdHocTasks(patientId: string): Promise<Task[]> {
   return (data as Task[]) ?? [];
 }
 
+// Latest-per-key reduction happens inside computeWatchFor; this just reads the
+// raw append-only discontinue events for one patient (audit_log, same channel
+// escalation/break-glass use — no dedicated table).
+async function getDiscontinueEvents(
+  patientId: string,
+): Promise<DiscontinueEvent[]> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("audit_log")
+    .select("created_at, metadata")
+    .eq("action", "instruction_discontinued")
+    .eq("entity_id", patientId);
+  const rows = (data ?? []) as {
+    created_at: string;
+    metadata: { task_key?: string } | null;
+  }[];
+  return rows.flatMap((r) =>
+    r.metadata?.task_key
+      ? [{ task_key: r.metadata.task_key, created_at: r.created_at }]
+      : [],
+  );
+}
+
 // Rebuild the review payload for a still-DRAFT note so it can re-open on a
 // different bed's page (問題 1 — after a right-patient re-target the doctor lands
 // on the correct chart with the note ready to confirm). Guarded: the note must be
@@ -171,12 +197,14 @@ export async function getPatientWindowData(
     ensureTodayMeds(patient.id, patient.ward),
   ]);
 
-  const [currentNote, routineTasks, medTasks, adHocTasks] = await Promise.all([
-    getLatestConfirmedNote(patient.id),
-    getTodayRoutineTasks(patient.id),
-    getTodayMedTasks(patient.id),
-    getAdHocTasks(patient.id),
-  ]);
+  const [currentNote, routineTasks, medTasks, adHocTasks, discontinued] =
+    await Promise.all([
+      getLatestConfirmedNote(patient.id),
+      getTodayRoutineTasks(patient.id),
+      getTodayMedTasks(patient.id),
+      getAdHocTasks(patient.id),
+      getDiscontinueEvents(patient.id),
+    ]);
 
   // Record body + history are only EXPOSED when the role may see them; the
   // watch-for list is operational and shown to everyone (computed server-side).
@@ -185,28 +213,13 @@ export async function getPatientWindowData(
   const fullHistory = await getRecordHistory(patient.id);
   const history = showRecord ? fullHistory : [];
 
-  // Standing/special instructions carry FORWARD across note confirmations: a new
-  // ward-round note archives the previous record, but its standing orders (glucose
-  // monitoring, wound checks…) don't stop existing — aggregate qualifying tasks
-  // from the current note plus the archived timeline (newest first), deduped.
-  // Suppressed grid-vital orders (e.g. a normal-priority "SpO₂ Q2H") get no task row,
-  // so Special Instructions is their ONLY home — admit them regardless of priority.
-  const qualifies = (t: NurseTask) =>
-    !!t.conditions ||
-    t.priority === "high" ||
-    t.priority === "critical" ||
-    isGridSpecialInstruction(t);
-  const watchFor: NurseTask[] = [];
-  const seen = new Set<string>();
-  for (const n of [currentNote, ...fullHistory]) {
-    for (const t of n?.nurse_tasks ?? []) {
-      const key = t.task.trim().toLowerCase();
-      if (qualifies(t) && !seen.has(key)) {
-        seen.add(key);
-        watchFor.push(t);
-      }
-    }
-  }
+  // Standing/special instructions carry FORWARD across note confirmations,
+  // minus doctor-discontinued orders; a later re-order revives (all the
+  // aggregation + exclusion semantics live in computeWatchFor).
+  const watchFor = computeWatchFor(
+    [currentNote, ...fullHistory],
+    discontinued,
+  );
 
   return { patient, note, history, watchFor, routineTasks, medTasks, adHocTasks };
 }

@@ -31,7 +31,9 @@ import { RoutineTimetable } from "@/components/routine-timetable";
 import { TaskCard } from "@/components/task-card";
 import { isActive, isUnauthorisedProposal } from "@/lib/tasks";
 import { EscalateButton } from "@/components/escalate-button";
+import { DiscontinueInstructionButton } from "@/components/discontinue-instruction-button";
 import { ProposeOrderPanel } from "@/components/propose-order-panel";
+import { instructionKey } from "@/lib/clinical/watch-for";
 import { canBreakGlass, canViewRecord } from "@/lib/server/role";
 import type {
   ClinicalNote,
@@ -281,12 +283,38 @@ export function PatientWindow({
               No standing instructions or watch-for orders.
             </p>
           ) : (
-            watchFor.map((t, i) => (
+            watchFor.map((t) => (
+              // Row key includes the patient: the master-detail layout reuses
+              // this component instance across bed switches, and two patients
+              // can carry the same baseline instruction text — child state
+              // (escalate done, discontinue armed) must not leak between them.
               <div
-                key={i}
+                key={`${patient.id}|${instructionKey(t.task)}`}
                 className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-sm"
               >
-                <p className="font-medium text-slate-800">{t.task}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-slate-800">{t.task}</p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {canEscalate && (
+                      <EscalateButton
+                        patientId={patient.id}
+                        bedNumber={patient.bed_number}
+                        context={
+                          t.conditions
+                            ? `${t.task} (watch: ${t.conditions})`
+                            : t.task
+                        }
+                        compact
+                      />
+                    )}
+                    {role === "doctor" && (
+                      <DiscontinueInstructionButton
+                        patientId={patient.id}
+                        task={t.task}
+                      />
+                    )}
+                  </div>
+                </div>
                 {t.conditions && (
                   <p className="mt-0.5 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
                     Watch for: {t.conditions}

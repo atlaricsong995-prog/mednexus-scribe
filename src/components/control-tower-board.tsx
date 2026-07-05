@@ -210,7 +210,7 @@ export function ControlTowerBoard({
               return (
                 <Link
                   key={p.id}
-                  href={`/patient/${encodeURIComponent(p.bed_number)}`}
+                  href={`/patient/${encodeURIComponent(p.bed_number)}?as=head_nurse`}
                   className={cn(
                     "block rounded-xl border p-3 transition-all hover:shadow-md hover:ring-1 hover:ring-slate-300",
                     BED_COLOR[color],

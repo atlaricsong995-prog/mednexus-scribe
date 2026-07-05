@@ -4,7 +4,6 @@ import { PatientWindow } from "@/components/patient-window";
 import { WardWorklist } from "@/components/ward-worklist";
 import { DoctorAlerts } from "@/components/doctor-alerts";
 import { AppShell } from "@/components/app-shell";
-import { getRole } from "@/lib/server/role";
 import { getWardData } from "@/lib/server/ward-data";
 import { getPatientWindowData } from "@/lib/server/patient-window-data";
 import { getRecentAlerts } from "@/lib/server/alerts-data";
@@ -21,7 +20,8 @@ export default async function MoPage({
 }: {
   searchParams: { bed?: string };
 }) {
-  const role = getRole();
+  // Route = role: this port is always the resident MO.
+  const role = "mo" as const;
   const bed = searchParams.bed ?? null;
 
   // Ward data + the escalation inbox backfill. Critical-vital auto-escalations

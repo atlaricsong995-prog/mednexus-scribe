@@ -12,7 +12,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { CompletionDialog } from "@/components/completion-dialog";
 import { cn } from "@/lib/utils";
-import type { Task } from "@/lib/supabase/types";
+import type { Role, Task } from "@/lib/supabase/types";
 import {
   PRIORITY_BADGE,
   STATUS_BADGE,
@@ -39,12 +39,16 @@ export function TaskCard({
   task,
   patient,
   interactive = true,
+  viewerRole,
 }: {
   task: Task;
   patient?: PatientLite;
   // When false (read-only roles like the head nurse), show status only — no
   // completion action.
   interactive?: boolean;
+  // Carried onto the bed link (?as=) so the patient window opens as the same
+  // role as this board — roles ride the URL, not a shared cookie.
+  viewerRole?: Role | null;
 }) {
   const due = whenLabel(task);
   const open = isOpenForNurse(task.status) && interactive;
@@ -84,7 +88,9 @@ export function TaskCard({
           </div>
           {patient && (
             <Link
-              href={`/patient/${encodeURIComponent(patient.bed_number)}`}
+              href={`/patient/${encodeURIComponent(patient.bed_number)}${
+                viewerRole ? `?as=${viewerRole}` : ""
+              }`}
               className="flex shrink-0 items-center gap-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
             >
               <BedDouble className="h-3.5 w-3.5" />

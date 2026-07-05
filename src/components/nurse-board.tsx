@@ -111,6 +111,7 @@ export function NurseBoard({
               key={task.id}
               task={task}
               patient={patientMap.get(task.patient_id)}
+              viewerRole="nurse"
             />
           ))}
         </div>

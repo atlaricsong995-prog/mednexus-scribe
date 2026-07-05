@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { PatientWindow } from "@/components/patient-window";
-import { getRole } from "@/lib/server/role";
+import { getRole, parseRole } from "@/lib/server/role";
 import { getPatientWindowData } from "@/lib/server/patient-window-data";
 import { WARD } from "@/lib/constants";
 
@@ -18,10 +18,15 @@ const BACK: Record<string, { href: string; label: string }> = {
 
 export default async function PatientWindowPage({
   params,
+  searchParams,
 }: {
   params: { bedId: string };
+  searchParams: { as?: string };
 }) {
-  const role = getRole();
+  // The shared window is told who opened it (?as=<role>, appended by each
+  // port's links) so tabs of the same browser keep independent roles; the
+  // landing-page cookie is only the fallback for a bare URL visit.
+  const role = parseRole(searchParams.as) ?? getRole();
   const data = await getPatientWindowData(
     WARD,
     decodeURIComponent(params.bedId),

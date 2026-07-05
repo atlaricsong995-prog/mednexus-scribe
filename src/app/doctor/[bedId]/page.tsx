@@ -8,7 +8,6 @@ import { PatientWindowModal } from "@/components/patient-window-modal";
 import { NoteReviewPanel } from "@/components/note-review-panel";
 import { DiscardDraftButton } from "@/components/discard-draft-button";
 import { Recorder } from "@/components/recorder";
-import { getRole } from "@/lib/server/role";
 import {
   getPatientWindowData,
   getDraftNoteReview,
@@ -25,7 +24,9 @@ export default async function PatientDetailPage({
   params: { bedId: string };
   searchParams: { reviewNote?: string; from?: string };
 }) {
-  const role = getRole();
+  // This page IS the doctor's port — the route, not a shared cookie, carries
+  // the role, so other windows' role picks can't mask this chart.
+  const role = "doctor" as const;
   const data = await getPatientWindowData(
     WARD,
     decodeURIComponent(params.bedId),

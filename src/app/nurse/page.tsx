@@ -3,7 +3,6 @@ import { ClipboardList, LayoutDashboard } from "lucide-react";
 import { PatientWindow } from "@/components/patient-window";
 import { WardWorklist } from "@/components/ward-worklist";
 import { AppShell } from "@/components/app-shell";
-import { getRole } from "@/lib/server/role";
 import { getWardData } from "@/lib/server/ward-data";
 import { getPatientWindowData } from "@/lib/server/patient-window-data";
 import { WARD } from "@/lib/constants";
@@ -15,7 +14,9 @@ export default async function NursePage({
 }: {
   searchParams: { bed?: string };
 }) {
-  const role = getRole();
+  // Route = role: this port is always the ward nurse, regardless of what other
+  // windows of the same browser picked on the landing page.
+  const role = "nurse" as const;
   const { patients, tasks } = await getWardData(WARD);
   const bed = searchParams.bed ?? null;
 

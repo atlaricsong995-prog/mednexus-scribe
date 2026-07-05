@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, FileClock, FolderOpen, UserCheck } from "lucide-react";
 
+import { AbnormalAckBanner } from "@/components/abnormal-ack-banner";
 import { PatientSummary } from "@/components/patient-summary";
 import { PatientWindow } from "@/components/patient-window";
 import { PatientWindowModal } from "@/components/patient-window-modal";
@@ -13,6 +14,7 @@ import {
   getDraftNoteReview,
   getLatestDraftReview,
 } from "@/lib/server/patient-window-data";
+import { isUnauthorisedProposal } from "@/lib/tasks";
 import { WARD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +37,14 @@ export default async function PatientDetailPage({
   if (!data) notFound();
 
   const { patient } = data;
+
+  // Nurse-flagged abnormal values still awaiting this doctor's sign-off, shown
+  // in-place so "Dictate order →" from the ward round doesn't strand the
+  // Acknowledge step back on the dashboard. adHocTasks already excludes grid
+  // cells; unauthorised MO proposals are a different queue (Authorise, not ack).
+  const pendingAbnormal = data.adHocTasks.filter(
+    (t) => t.status === "submitted" && t.abnormal && !isUnauthorisedProposal(t),
+  );
 
   // A note re-targeted to this patient (問題 1) re-opens here for review instead of
   // the live recorder — the header/window above now correctly read this bed.
@@ -65,6 +75,10 @@ export default async function PatientDetailPage({
 
       <div className="space-y-6">
         <PatientSummary patient={patient} />
+
+        {pendingAbnormal.length > 0 && (
+          <AbnormalAckBanner initialTasks={pendingAbnormal} />
+        )}
 
         {/* Open the full window in a modal — closing it returns here, not the ward. */}
         <PatientWindowModal

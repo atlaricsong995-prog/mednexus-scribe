@@ -148,12 +148,17 @@ export function ApprovalsPanel({
             {/* Abnormal value the nurse flagged — let the doctor act on it (not just
                 acknowledge) by jumping straight to dictating a new order (問題 3d). */}
             {t.abnormal && p && (
-              <Link
-                href={`/doctor/${encodeURIComponent(p.bed_number)}`}
-                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-red-600 underline-offset-2 hover:underline"
-              >
-                <Mic className="h-3.5 w-3.5" /> Dictate order →
-              </Link>
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+                <Link
+                  href={`/doctor/${encodeURIComponent(p.bed_number)}`}
+                  className="inline-flex items-center gap-1 font-medium text-red-600 underline-offset-2 hover:underline"
+                >
+                  <Mic className="h-3.5 w-3.5" /> Dictate order →
+                </Link>
+                <span className="text-slate-400">
+                  Acknowledge separately to sign off this value
+                </span>
+              </p>
             )}
           </div>
           <Button

@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/confirm-button";
 import { cn } from "@/lib/utils";
-import { checkMedicationSafety } from "@/lib/safety";
+import { checkMedicationSafety, medsStoppedByNote } from "@/lib/safety";
 import {
   ROUTE_OPTIONS,
   FREQ_OPTIONS,
@@ -245,6 +245,13 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
   );
   const criticalFlags = flags.filter((f) => f.severity === "critical");
   const warningFlags = flags.filter((f) => f.severity === "warning");
+  // Chart meds this note omits — they STOP on dispatch (the confirmed note is
+  // the active regimen). Live, so deleting a duplicate row surfaces the
+  // consequence immediately, before Confirm.
+  const stoppingMeds = useMemo(
+    () => medsStoppedByNote(meds, currentMeds),
+    [meds, currentMeds],
+  );
 
   return (
     <div className="space-y-4">
@@ -401,6 +408,26 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
             </span>
           </div>
 
+          {/* Omission = discontinuation warning — the counterpart of the
+              duplicate flag. Lists chart drugs this note does not restate. */}
+          {stoppingMeds.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              <span>
+                <span className="font-semibold">
+                  Not in this note — will STOP on dispatch:
+                </span>{" "}
+                {stoppingMeds
+                  .map((c) =>
+                    [c.drug, c.dose, c.frequency].filter(Boolean).join(" "),
+                  )
+                  .join(" · ")}
+                . The confirmed note becomes the active medication list — keep a
+                drug&apos;s row (same or edited dose) to continue it; deleting
+                its row stops it.
+              </span>
+            </div>
+          )}
           {meds.length === 0 && (
             <p className="text-sm text-slate-500">No medications extracted.</p>
           )}

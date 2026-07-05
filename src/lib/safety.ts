@@ -115,7 +115,7 @@ export function checkMedicationSafety(
       flags.push({
         type: "duplicate",
         drug: m.drug,
-        reason: `${m.drug} is already on the current medication chart (${[existing.drug, existing.dose, existing.frequency].filter(Boolean).join(" ")}). Confirm this replaces the existing order.`,
+        reason: `${m.drug} is already on the current chart (${[existing.drug, existing.dose, existing.frequency].filter(Boolean).join(" ")}). Keep this row to continue it — the dose here replaces the existing order. Delete the row only if you intend to STOP the drug: the confirmed note becomes the active medication list.`,
         severity: "warning",
       });
     }
@@ -140,4 +140,23 @@ export function checkMedicationSafety(
   }
 
   return flags;
+}
+
+// Current-chart medications NOT restated in the new note. The latest confirmed
+// note IS the active regimen (ensureTodayMeds materialises the MAR from it
+// alone), so anything the note omits — a deleted duplicate row or a drug never
+// re-dictated — stops on dispatch. The review panel shows these so an omission
+// is a decision, not an accident. Same name matching as the duplicate check.
+export function medsStoppedByNote(
+  meds: Medication[],
+  currentMeds: Medication[],
+): Medication[] {
+  return (currentMeds ?? []).filter((c) => {
+    const cur = norm(c.drug);
+    if (!cur) return false;
+    return !meds.some((m) => {
+      const drug = norm(m.drug);
+      return !!drug && matches(drug, cur);
+    });
+  });
 }

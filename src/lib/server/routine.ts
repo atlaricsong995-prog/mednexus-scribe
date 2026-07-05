@@ -151,6 +151,12 @@ export async function ensureTodayMeds(
   const rows: TaskInsert[] = [];
   for (const m of meds) {
     const key = medKey(m.drug);
+    // STAT / once-only orders are one-off events anchored to the hour they were
+    // DISPATCHED. medSlotHours derives their slot from "now", so re-materialising
+    // on a later window load would mint a fresh pending cell every hour the
+    // window is opened — an already-given dose resurrecting as due again. The
+    // dispatch-created cell is the whole story; never re-materialise these.
+    if (/\bstat\b|\bonce\b/i.test(m.frequency ?? "")) continue;
     const slots = todayMedSlots(m.frequency);
     // PRN / unknown frequency → charted ad-hoc (no fixed daily slot); the original
     // null-scheduled cell persists, so nothing to materialise here.

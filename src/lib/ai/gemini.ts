@@ -144,6 +144,15 @@ RULES:
    dictated, and never add regular/home medications that were not spoken. NEVER state the
    patient's age, gender, or other demographics unless the doctor spoke them in the
    transcript (no "54-year-old woman" openers invented from context).
+   This applies with FULL FORCE to nurse_tasks — a task exists ONLY if the doctor spoke an
+   instruction for the nurses:
+   - NEVER add a clinically-sensible-but-unspoken monitoring task (e.g. "Monitor blood
+     glucose" just because insulin was ordered, "Monitor BP" for an antihypertensive).
+     The system schedules post-dose monitoring itself with deterministic rules — an
+     invented task here creates DUPLICATE work for the nurse.
+   - NEVER restate a medication as an "Administer X" task. Every entry in medications[]
+     is already dispatched to the MAR automatically.
+   - If the doctor dictated no nurse instructions, nurse_tasks MUST be an empty array.
 3. Use Malaysian medical conventions (e.g. "BD" not "BID", "TDS" not "TID").
    ALL output text MUST be in English only. If the transcript contains Malay or
    Chinese words, translate them to standard English medical terms (e.g. darah

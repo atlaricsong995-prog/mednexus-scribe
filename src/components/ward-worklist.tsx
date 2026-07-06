@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   TriangleAlert,
@@ -45,6 +45,25 @@ function timeLabel(d: Date | string): string {
   });
 }
 
+// A dispatched drug fans out into one MAR cell per give-time slot, but the feed
+// should narrate it as ONE event ("dispatched Augmentin"), so dedupe per drug
+// per note rather than per slot.
+function medFeedKey(task: Task): string {
+  return `${task.note_id ?? "none"}::${task.med_key}`;
+}
+
+// Grid cells that must pierce the isGridCell filter for the head nurse's safety
+// surfaces (critical banner + bed colour): an override-dispensed allergy drug,
+// a critical-priority cell, or a vital charted abnormal. Ordinary grid cells
+// stay hidden — they are timetable scaffolding, not events.
+function isSafetyGridCell(task: Task): boolean {
+  return (
+    isGridCell(task) &&
+    isActive(task.status) &&
+    (task.priority === "critical" || !!task.safety_alert || task.abnormal)
+  );
+}
+
 function seedEntry(task: Task, patientMap: Map<string, PatientLite>): FeedEntry {
   const p = patientMap.get(task.patient_id);
   const bed = p ? ` · Bed ${p.bed_number}` : "";
@@ -66,7 +85,7 @@ function seedEntry(task: Task, patientMap: Map<string, PatientLite>): FeedEntry 
   return {
     key: `seed-${task.id}`,
     at: timeLabel(when),
-    message: `${verb}: ${task.description}${bed}`,
+    message: `${verb}: ${task.description}${task.safety_alert ? " ⚠ override" : ""}${bed}`,
     tone,
   };
 }
@@ -98,14 +117,32 @@ export function WardWorklist({
 }) {
   const patientMap = useMemo(() => buildPatientMap(patients), [patients]);
 
-  const [feed, setFeed] = useState<FeedEntry[]>(() =>
-    showActivity
-      ? [...initialTasks]
-          .filter((t) => !isGridCell(t))
-          .sort((a, b) => (a.created_at > b.created_at ? -1 : 1))
-          .slice(0, 30)
-          .map((t) => seedEntry(t, patientMap))
-      : [],
+  const [feed, setFeed] = useState<FeedEntry[]>(() => {
+    if (!showActivity) return [];
+    // Med cells ride into the feed as one entry per drug; routine timetable
+    // cells stay out (daily scaffolding, not doctor actions).
+    const seenMeds = new Set<string>();
+    return [...initialTasks]
+      .sort((a, b) => (a.created_at > b.created_at ? -1 : 1))
+      .filter((t) => {
+        if (!isGridCell(t)) return true;
+        if (t.med_key == null) return false;
+        const key = medFeedKey(t);
+        if (seenMeds.has(key)) return false;
+        seenMeds.add(key);
+        return true;
+      })
+      .slice(0, 30)
+      .map((t) => seedEntry(t, patientMap));
+  });
+
+  // Drugs already announced on the feed (seeded or live) — a page opened
+  // mid-dispatch must not log the same drug twice when its remaining slot
+  // cells arrive over realtime.
+  const announcedMeds = useRef<Set<string>>(
+    new Set(
+      initialTasks.filter((t) => t.med_key != null).map((t) => medFeedKey(t)),
+    ),
   );
 
   const pushFeed = (task: Task, tone: FeedEntry["tone"], verb: string) => {
@@ -115,7 +152,7 @@ export function WardWorklist({
         {
           key: `${task.id}-${tone}-${Date.now()}`,
           at: timeLabel(new Date()),
-          message: `${verb}: ${task.description}${p ? ` · Bed ${p.bed_number}` : ""}`,
+          message: `${verb}: ${task.description}${task.safety_alert ? " ⚠ override" : ""}${p ? ` · Bed ${p.bed_number}` : ""}`,
           tone,
         },
         ...prev,
@@ -126,7 +163,15 @@ export function WardWorklist({
   const { tasks: allTasks, status } = useRealtimeTasks(ward, {
     initialTasks,
     onInsert: (task) => {
-      if (!showActivity || isGridCell(task)) return;
+      if (!showActivity) return;
+      if (isGridCell(task)) {
+        // MAR cells: announce the DRUG once, not every give-time slot; routine
+        // timetable cells never hit the feed.
+        if (task.med_key == null) return;
+        const key = medFeedKey(task);
+        if (announcedMeds.current.has(key)) return;
+        announcedMeds.current.add(key);
+      }
       pushFeed(task, "dispatch", `${DEMO_DOCTOR_NAME} dispatched`);
     },
     onUpdate: (task) => {
@@ -155,11 +200,29 @@ export function WardWorklist({
     return m;
   }, [tasks]);
 
-  const criticalActive = tasks.filter(
-    (t) =>
-      isActive(t.status) &&
-      (t.priority === "critical" || !!t.safety_alert || t.abnormal),
-  );
+  // Safety exceptions pierce the grid filter: an override-dispensed allergy drug
+  // (or abnormal-charted vital) lives on the MAR/timetable, yet the head nurse
+  // must still see it on the banner and bed colour. Deduped per drug so a
+  // three-slot Augmentin row is one banner line, not three.
+  const safetyGrid = useMemo(() => {
+    const seen = new Set<string>();
+    return allTasks.filter((t) => {
+      if (!isSafetyGridCell(t)) return false;
+      const key = t.med_key != null ? medFeedKey(t) : t.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [allTasks]);
+
+  const criticalActive = [
+    ...tasks.filter(
+      (t) =>
+        isActive(t.status) &&
+        (t.priority === "critical" || !!t.safety_alert || t.abnormal),
+    ),
+    ...safetyGrid,
+  ];
   const live = status === "subscribed";
 
   return (
@@ -212,7 +275,13 @@ export function WardWorklist({
             {patients.map((p) => {
               const ptasks = tasksByPatient.get(p.id) ?? [];
               const activeCount = ptasks.filter((t) => isActive(t.status)).length;
-              const color = bedStatusColor(ptasks);
+              // Safety grid cells colour the bed red but stay out of the active
+              // count — outstanding scheduled meds are normal ward state, an
+              // override drug is not.
+              const color = bedStatusColor([
+                ...ptasks,
+                ...safetyGrid.filter((t) => t.patient_id === p.id),
+              ]);
               const sel = selectedBed === p.bed_number;
               return (
                 <Link

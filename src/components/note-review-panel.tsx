@@ -106,6 +106,37 @@ const textareaCls =
 const selectCls =
   "h-9 w-full rounded-md border border-input bg-white px-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
+// Nurse-task "When" presets — the same cadence tokens dispatch already parses
+// (recurring → per-occurrence fan-out / Special Instructions; STAT → one-off).
+// "At a specific time…" swaps in a datetime picker; any other free text the AI
+// emitted (e.g. "1 hour after dose") is kept as an extra option so it is never
+// silently destroyed by the dropdown.
+const WHEN_PRESETS: { value: string; label: string }[] = [
+  { value: "STAT", label: "STAT (now, once)" },
+  { value: "OD", label: "OD (daily)" },
+  { value: "BD", label: "BD (2× daily)" },
+  { value: "TDS", label: "TDS (3× daily)" },
+  { value: "QDS", label: "QDS (4× daily)" },
+  { value: "Q4H", label: "Q4H" },
+  { value: "Q6H", label: "Q6H" },
+  { value: "Q8H", label: "Q8H" },
+  { value: "Q12H", label: "Q12H" },
+  { value: "PRN", label: "PRN (as needed)" },
+];
+const WHEN_TIME = "__time__";
+
+function isTimestampWhen(when: string): boolean {
+  return /\d{4}-\d{2}-\d{2}/.test(when);
+}
+
+// ISO → the local "YYYY-MM-DDTHH:mm" a datetime-local input expects.
+function isoToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -664,11 +695,46 @@ export function NoteReviewPanel({ data }: { data: NoteReviewData }) {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <FieldLabel>When</FieldLabel>
-                  <Input
-                    value={t.when}
-                    onChange={(e) => updateTask(i, "when", e.target.value)}
-                    className="bg-white"
-                  />
+                  <div className="space-y-1">
+                    <select
+                      value={isTimestampWhen(t.when) ? WHEN_TIME : t.when}
+                      onChange={(e) =>
+                        updateTask(
+                          i,
+                          "when",
+                          e.target.value === WHEN_TIME
+                            ? new Date().toISOString()
+                            : e.target.value,
+                        )
+                      }
+                      className={selectCls}
+                    >
+                      <option value="">— no fixed time —</option>
+                      {WHEN_PRESETS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                      <option value={WHEN_TIME}>at a specific time…</option>
+                      {!isTimestampWhen(t.when) &&
+                        t.when.trim() !== "" &&
+                        !WHEN_PRESETS.some((o) => o.value === t.when) && (
+                          <option value={t.when}>{t.when}</option>
+                        )}
+                    </select>
+                    {isTimestampWhen(t.when) && (
+                      <Input
+                        type="datetime-local"
+                        value={isoToLocalInput(t.when)}
+                        onChange={(e) => {
+                          const d = new Date(e.target.value);
+                          if (!Number.isNaN(d.getTime()))
+                            updateTask(i, "when", d.toISOString());
+                        }}
+                        className="bg-white"
+                      />
+                    )}
+                  </div>
                 </div>
                 <div>
                   <FieldLabel>Conditions</FieldLabel>

@@ -7,20 +7,42 @@
 // (no DB column yet — persisted on Day 4 with dispatch, see plan).
 import { z } from "zod";
 
+// Gemini sometimes fills an empty optional field with the literal STRING "null"
+// (or "none"/"N/A") instead of JSON null. `z.string().nullable()` accepts that
+// happily, and the word then leaks into the ward UI ("Paracetamol 1 g PO PRN ·
+// null" on the MAR, a watch condition reading "null" on task cards). Normalise
+// every nullish spelling to a real null at the validation boundary.
+const NULLISH_TEXT =
+  /^(null|none|nil|n\/?a|not\s+(?:specified|stated|applicable)|-+|—)$/i;
+
+function cleanOptionalText(v: string | null | undefined): string | null {
+  const s = v?.trim();
+  return !s || NULLISH_TEXT.test(s) ? null : s;
+}
+
+const nullableText = z
+  .string()
+  .nullable()
+  .optional()
+  .transform(cleanOptionalText);
+
 export const MedicationSchema = z.object({
   drug: z.string(),
   dose: z.string(),
   route: z.string(),
   frequency: z.string(),
-  duration: z.string(),
+  // Required by contract (rule 8) but still sanitised: a nullish spelling would
+  // otherwise render as "× null" / block the "· ongoing" fallback downstream.
+  duration: z.string().transform((s) => (NULLISH_TEXT.test(s.trim()) ? "" : s)),
   // Advisory food-timing / caution (Workstream E). Optional — null when not dictated.
-  admin_instruction: z.string().nullable().optional(),
+  admin_instruction: nullableText,
 });
 
 export const NurseTaskSchema = z.object({
   task: z.string(),
   when: z.string(),
-  conditions: z.string().nullable(),
+  // Same sanitisation, but the key stays required (mirrors the NurseTask type).
+  conditions: z.string().nullable().transform(cleanOptionalText),
   priority: z.enum(["low", "normal", "high", "critical"]),
   // For observation/vital tasks, the controlled type from OBSERVATION_CATALOG
   // (bp/glucose/temp/spo2/hr/rr) so the nurse gets a fixed-unit input and the

@@ -186,11 +186,17 @@ RULES:
 10. admin_instruction — ONLY when the doctor dictates a food-timing / caution for a drug
     (e.g. "take with food", "on an empty stomach", "at night"), set it, preferring one of:
     ${ADMIN_INSTRUCTION_OPTIONS.join(", ")}. Omit / null it when none was spoken — never invent one.
-11. nurse_tasks.conditions is null when there is no condition.
+11. nurse_tasks.conditions is null when there is no condition. For EVERY empty optional
+    field (admin_instruction, conditions) use JSON null — NEVER the string "null",
+    "none" or "N/A". Those words would print verbatim on the ward UI.
 12. obs_type — for nurse_tasks that record a routine vital sign / measurement, set obs_type to the matching catalog key:
     bp (blood pressure), glucose (blood sugar / BSL / capillary glucose), temp (temperature),
     spo2 (oxygen saturation / SpO₂ / sats), hr (heart rate / pulse), rr (respiratory rate).
     For any task that is NOT one of these measurements (medications to give, procedures, generic monitoring), obs_type MUST be null.
+13. CONSISTENCY — medical_note.plan is the permanent record's narrative of the SAME orders
+    you list in medications[] and nurse_tasks[]. Frequencies, doses, routes and durations
+    must agree exactly between the prose and the structured fields (if the order says QDS,
+    the plan must not say TDS). When unsure, restate the structured value in the prose.
 
 SAFETY RULES:
 ${SAFETY_RULES}

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ensureTodayRoutine,
   ensureTodayMeds,
+  ensureTodayObsOrders,
   getTodayRoutineTasks,
   getTodayMedTasks,
 } from "@/lib/server/routine";
@@ -93,7 +94,9 @@ async function getAdHocTasks(patientId: string): Promise<Task[]> {
     .select("*")
     .eq("patient_id", patientId)
     .is("routine_key", null)
-    .is("med_key", null)
+    // MO-proposed medication orders carry a med_key (safety nets) yet remain
+    // worklist items, not MAR cells — keep them on the completable list.
+    .or("med_key.is.null,proposed_by_mo.is.true")
     .order("created_at", { ascending: false });
   return (data as Task[]) ?? [];
 }
@@ -195,6 +198,7 @@ export async function getPatientWindowData(
   await Promise.all([
     ensureTodayRoutine(patient.id, patient.ward),
     ensureTodayMeds(patient.id, patient.ward),
+    ensureTodayObsOrders(patient.id, patient.ward),
   ]);
 
   const [currentNote, routineTasks, medTasks, adHocTasks, discontinued] =

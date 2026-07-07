@@ -42,7 +42,7 @@ export async function PATCH(
 
   const { data: task, error: fetchErr } = await supabase
     .from("tasks")
-    .select("id, status, obs_type, routine_key, med_key")
+    .select("id, status, obs_type, routine_key, med_key, proposed_by_mo")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -68,8 +68,11 @@ export async function PATCH(
   // Charted-not-approved cells record straight to 'approved' so they never clutter
   // the attending's approval queue: routine vitals (Enh Day 3) and MAR drug
   // administrations (問題 2 — the nurse signs the give, it isn't re-approved by a
-  // doctor). Ad-hoc nurse tasks still go via 'submitted' for sign-off.
-  const recordDirect = !!task.routine_key || !!task.med_key;
+  // doctor). Ad-hoc nurse tasks still go via 'submitted' for sign-off — and so do
+  // MO-proposed orders (they carry a med_key for the safety nets, but the
+  // hierarchy demands the attending acknowledge the completed work).
+  const recordDirect =
+    (!!task.routine_key || !!task.med_key) && !task.proposed_by_mo;
   const now = new Date().toISOString();
   const { data: updated, error: updateErr } = await supabase
     .from("tasks")

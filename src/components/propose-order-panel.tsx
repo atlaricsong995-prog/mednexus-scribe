@@ -95,6 +95,10 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
         taskType,
         priority,
         rationale,
+        // Structured drug name (medication type only) — the server derives the
+        // MAR med_key from it so safety nets (post-dose monitoring, duplicate
+        // checks) recognise the drug once the order is authorised.
+        drug: isMed ? drug.trim() : undefined,
       });
       if (!res.ok) throw new Error(res.error ?? "Could not propose order.");
       toast({

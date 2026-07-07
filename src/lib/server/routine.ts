@@ -9,12 +9,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DEFAULT_ROUTINE,
   OBSERVATION_CATALOG,
+  isObsType,
   medKey,
   routineKey,
   todayMedSlots,
   todayRoutineSlots,
 } from "@/lib/clinical/vocab";
-import type { Database, Medication, Task } from "@/lib/supabase/types";
+import { gridObsOrderSlots } from "@/lib/clinical/obs-routing";
+import { instructionKey } from "@/lib/clinical/watch-for";
+import type { Database, Medication, NurseTask, Task } from "@/lib/supabase/types";
 
 type TaskInsert = Database["public"]["Tables"]["tasks"]["Insert"];
 
@@ -117,7 +120,7 @@ export async function ensureTodayMeds(
 
   const { data: note } = await supabase
     .from("clinical_notes")
-    .select("id, medications")
+    .select("id, medications, confirmed_at")
     .eq("patient_id", patientId)
     .eq("status", "confirmed")
     .order("confirmed_at", { ascending: false })
@@ -129,6 +132,16 @@ export async function ensureTodayMeds(
   );
   if (!note || meds.length === 0) return;
 
+  // Dispatch only materialises give-times from the confirm moment onward (an
+  // order can't have been due before it existed). Mirror that here, or the next
+  // window open would resurrect exactly the past slots dispatch skipped. From
+  // the day after confirmation, the full day's slots are legitimately due.
+  const confirmedAt = note.confirmed_at ? new Date(note.confirmed_at) : null;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const minHour =
+    confirmedAt && confirmedAt >= startOfToday ? confirmedAt.getHours() : 0;
+
   // Carry per-drug provenance (description / safety override / priority) forward from
   // any existing cell of that drug, so re-materialised cells keep the red allergy /
   // dose override the dispatch computed (the MAR component reads it off the cell).
@@ -136,6 +149,9 @@ export async function ensureTodayMeds(
     .from("tasks")
     .select("med_key, description, safety_alert, priority")
     .eq("patient_id", patientId)
+    // MO-proposed orders share a drug's med_key but aren't MAR cells — their
+    // description must not become the template for re-materialised give-times.
+    .eq("proposed_by_mo", false)
     .not("med_key", "is", null);
   type MedRep = {
     med_key: string | null;
@@ -157,7 +173,7 @@ export async function ensureTodayMeds(
     // window is opened — an already-given dose resurrecting as due again. The
     // dispatch-created cell is the whole story; never re-materialise these.
     if (/\bstat\b|\bonce\b/i.test(m.frequency ?? "")) continue;
-    const slots = todayMedSlots(m.frequency);
+    const slots = todayMedSlots(m.frequency).filter((s) => s.hour >= minHour);
     // PRN / unknown frequency → charted ad-hoc (no fixed daily slot); the original
     // null-scheduled cell persists, so nothing to materialise here.
     if (slots.length === 0) continue;
@@ -185,6 +201,90 @@ export async function ensureTodayMeds(
       onConflict: "patient_id,med_key,scheduled_for",
       ignoreDuplicates: true,
     });
+}
+
+// Ensure today's cells exist for ORDERED grid observations (2026-07-07 — "BSL QDS"
+// charts as a dynamic routine-grid row, the ward's bedside CBG chart). The active
+// orders live on the current confirmed note's nurse_tasks. A doctor discontinue
+// (audit_log instruction_discontinued) NEWER than that note stops re-materialisation;
+// a fresh re-order (newer confirmed_at) revives it — the same new-order-beats-old-stop
+// semantics computeWatchFor applies to Special Instructions. Slots follow the same
+// "from the confirm moment onward" rule as ensureTodayMeds.
+export async function ensureTodayObsOrders(
+  patientId: string,
+  ward: string,
+): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { data: note } = await supabase
+    .from("clinical_notes")
+    .select("id, nurse_tasks, confirmed_at")
+    .eq("patient_id", patientId)
+    .eq("status", "confirmed")
+    .order("confirmed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nurseTasks = ((note?.nurse_tasks as NurseTask[] | null) ?? []).filter(
+    (t) => t?.task?.trim(),
+  );
+  if (!note || nurseTasks.length === 0) return;
+
+  const confirmedAt = note.confirmed_at ? new Date(note.confirmed_at) : null;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const minHour =
+    confirmedAt && confirmedAt >= startOfToday ? confirmedAt.getHours() : 0;
+  const orderedAtMs = confirmedAt?.getTime() ?? 0;
+
+  // Latest discontinue per instruction key — a stop newer than the order hides it.
+  const { data: stops } = await supabase
+    .from("audit_log")
+    .select("created_at, metadata")
+    .eq("action", "instruction_discontinued")
+    .eq("entity_id", patientId);
+  const stoppedAt = new Map<string, number>();
+  for (const r of (stops ?? []) as {
+    created_at: string;
+    metadata: { task_key?: string } | null;
+  }[]) {
+    const k = r.metadata?.task_key;
+    const at = Date.parse(r.created_at);
+    if (!k || !Number.isFinite(at)) continue;
+    const prev = stoppedAt.get(k);
+    if (prev === undefined || at > prev) stoppedAt.set(k, at);
+  }
+
+  const rows: TaskInsert[] = [];
+  for (const t of nurseTasks) {
+    const slots = gridObsOrderSlots(t);
+    if (!slots || !isObsType(t.obs_type)) continue;
+    const stopped = stoppedAt.get(instructionKey(t.task));
+    if (stopped !== undefined && stopped > orderedAtMs) continue;
+    const spec = OBSERVATION_CATALOG[t.obs_type];
+    const rkey = routineKey(t.obs_type);
+    for (const slot of slots.filter((s) => s.hour >= minHour)) {
+      rows.push({
+        note_id: note.id,
+        patient_id: patientId,
+        ward,
+        task_type: "observation",
+        description: `${spec.label} (ordered ${slot.label})`,
+        obs_type: t.obs_type,
+        routine_key: rkey,
+        scheduled_for: slot.iso,
+        conditions: t.conditions ?? null,
+        priority: t.priority ?? "normal",
+        status: "pending",
+      });
+    }
+  }
+  if (rows.length === 0) return;
+
+  await supabase.from("tasks").upsert(rows, {
+    onConflict: "patient_id,routine_key,scheduled_for",
+    ignoreDuplicates: true,
+  });
 }
 
 // Today's MAR cells for a patient (問題 2): today's scheduled give-times PLUS any PRN

@@ -46,7 +46,9 @@ export function MedicationTimetable({
   let hasPrn = false;
 
   for (const t of medTasks) {
-    if (!t.med_key) continue;
+    // MO-proposed orders carry a med_key for the safety nets but are worklist
+    // items (task card), not MAR give-time cells — skip so they don't render twice.
+    if (!t.med_key || t.proposed_by_mo) continue;
     let row = rows.get(t.med_key);
     if (!row) {
       row = {

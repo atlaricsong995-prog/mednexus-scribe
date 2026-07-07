@@ -8,11 +8,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRole } from "@/lib/server/role";
 import { instructionKey } from "@/lib/clinical/watch-for";
+import { gridObsOrderSlots } from "@/lib/clinical/obs-routing";
+import { isObsType, routineKey } from "@/lib/clinical/vocab";
 import {
   getLatestConfirmedNote,
   getRecordHistory,
 } from "@/lib/server/patient-window-data";
-import type { ClinicalNote } from "@/lib/supabase/types";
+import type { ClinicalNote, NurseTask } from "@/lib/supabase/types";
 
 export interface BreakGlassResult {
   ok: boolean;
@@ -136,5 +138,36 @@ export async function discontinueInstruction(
   if (error) {
     return { ok: false, error: `Could not discontinue: ${error.message}` };
   }
+
+  // If the discontinued instruction is an ORDERED grid observation ("BSL QDS"
+  // charts as a dynamic timetable row), stopping the order also cancels its
+  // remaining UN-charted cells — signed readings stay as history, and a later
+  // re-order re-materialises fresh cells (new order beats old stop). Find the
+  // newest note carrying this instruction to recover its obs_type/cadence.
+  const key = instructionKey(label);
+  const [current, history] = await Promise.all([
+    getLatestConfirmedNote(patientId),
+    getRecordHistory(patientId),
+  ]);
+  let ordered: NurseTask | null = null;
+  for (const n of [current, ...history]) {
+    const hit = (n?.nurse_tasks ?? []).find(
+      (t) => instructionKey(t.task) === key,
+    );
+    if (hit) {
+      ordered = hit;
+      break;
+    }
+  }
+  if (ordered && isObsType(ordered.obs_type) && gridObsOrderSlots(ordered)) {
+    await supabase
+      .from("tasks")
+      .delete()
+      .eq("patient_id", patientId)
+      .eq("routine_key", routineKey(ordered.obs_type))
+      .eq("status", "pending")
+      .is("completion_value", null);
+  }
+
   return { ok: true };
 }

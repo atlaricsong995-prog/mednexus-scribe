@@ -10,6 +10,7 @@ import {
   OBSERVATION_CATALOG,
   obsSeverity,
   routineKey,
+  routineObsFromKey,
   todayRoutineSlots,
 } from "@/lib/clinical/vocab";
 import type { Task } from "@/lib/supabase/types";
@@ -39,6 +40,25 @@ export function RoutineTimetable({
     if (!t.routine_key || !t.scheduled_for) continue;
     byCell.set(`${t.routine_key}|${new Date(t.scheduled_for).getHours()}`, t);
   }
+
+  // Rows = the standing q4h vitals PLUS any ORDERED observation rows present in
+  // today's cells (a dictated "BSL QDS" materialises a dynamic glucose row — the
+  // ward's bedside CBG chart). Ordered rows only own the slots their cadence
+  // materialised; the other columns render as inert "—".
+  const defaultKeys = new Set<string>(DEFAULT_ROUTINE.map((o) => routineKey(o)));
+  const orderedRows: { obs: (typeof DEFAULT_ROUTINE)[number]; key: string }[] = [];
+  const seenExtra = new Set<string>();
+  for (const t of routineTasks) {
+    if (!t.routine_key || defaultKeys.has(t.routine_key) || seenExtra.has(t.routine_key))
+      continue;
+    seenExtra.add(t.routine_key);
+    const obs = routineObsFromKey(t.routine_key);
+    if (obs) orderedRows.push({ obs, key: t.routine_key });
+  }
+  const rows = [
+    ...DEFAULT_ROUTINE.map((obs) => ({ obs, key: routineKey(obs), ordered: false })),
+    ...orderedRows.map((r) => ({ ...r, ordered: true })),
+  ];
 
   const nowHour = new Date().getHours();
   // The "current" slot = the latest slot whose hour has passed (the one due now).
@@ -72,14 +92,18 @@ export function RoutineTimetable({
           </tr>
         </thead>
         <tbody>
-          {DEFAULT_ROUTINE.map((obs) => {
+          {rows.map(({ obs, key, ordered }) => {
             const spec = OBSERVATION_CATALOG[obs];
-            const key = routineKey(obs);
             return (
-              <tr key={obs}>
+              <tr key={key}>
                 <td className="whitespace-nowrap px-2 py-1 text-xs font-medium text-slate-600">
                   {spec.label}
                   <span className="ml-1 text-slate-400">({spec.unit})</span>
+                  {ordered && (
+                    <span className="ml-1 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-700">
+                      ordered
+                    </span>
+                  )}
                 </td>
                 {slots.map((s) => {
                   const task = byCell.get(`${key}|${s.hour}`);
@@ -166,7 +190,9 @@ export function RoutineTimetable({
         </tbody>
       </table>
       <p className="mt-2 px-1 text-xs text-slate-400">
-        Today&apos;s routine vitals (q4h).{" "}
+        Today&apos;s routine vitals (q4h).
+        {orderedRows.length > 0 &&
+          " Rows marked ORDERED are doctor-ordered observations charting at their prescribed times."}{" "}
         {readOnly
           ? "Read-only — value · nurse."
           : "Tap a cell to chart — mildly abnormal values turn orange, critical values red (auto-escalated), overdue slots amber."}

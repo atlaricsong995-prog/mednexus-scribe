@@ -8,6 +8,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRole } from "@/lib/server/role";
 import { WARD } from "@/lib/constants";
+import { medKey } from "@/lib/clinical/vocab";
 import type { TaskPriority, TaskType } from "@/lib/supabase/types";
 
 const TASK_TYPES: TaskType[] = ["medication", "observation", "procedure", "other"];
@@ -24,6 +25,7 @@ export async function proposeOrder(input: {
   taskType?: string;
   priority?: string;
   rationale?: string;
+  drug?: string;
 }): Promise<ProposeResult> {
   const role = getRole();
   if (role !== "mo") {
@@ -45,6 +47,15 @@ export async function proposeOrder(input: {
     ? (input.priority as TaskPriority)
     : "normal";
 
+  // A proposed MEDICATION carries its MAR med_key from day one, so once the
+  // attending authorises it the med-keyed safety nets recognise the drug:
+  // post-dose monitoring fires when the nurse signs it, and a later dictation
+  // of the same drug trips the duplicate check. The task still lives on the
+  // worklist (not the MAR grid) — isMedCell() excludes proposed_by_mo rows.
+  const drugName = input.drug?.trim();
+  const proposedMedKey =
+    taskType === "medication" && drugName ? medKey(drugName) : null;
+
   const supabase = createAdminClient();
   const { error } = await supabase.from("tasks").insert({
     note_id: null,
@@ -52,6 +63,7 @@ export async function proposeOrder(input: {
     ward: WARD,
     task_type: taskType,
     description,
+    med_key: proposedMedKey,
     proposed_by_mo: true,
     priority,
     // Rationale rides completion_notes (no schema change) — the approval card already

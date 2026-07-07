@@ -26,7 +26,14 @@
 //
 // Suppression only removes the redundant task ROW; the doctor's authored nurse_tasks
 // list on the note is untouched.
-import { DEFAULT_ROUTINE, isObsType, type ObsType } from "./vocab.ts";
+import {
+  DEFAULT_ROUTINE,
+  ROUTINE_SLOT_HOURS,
+  isObsType,
+  todayMedSlots,
+  type ObsType,
+  type RoutineSlot,
+} from "./vocab.ts";
 import type { NurseTask } from "@/lib/supabase/types";
 
 // Keyword fallback so we can still detect a routine vital when Gemini didn't tag
@@ -86,12 +93,39 @@ export function isRoutineCovered(task: NurseTask): boolean {
   return true; // plain routine (with or without conditions) -> grid covers it
 }
 
+// An ORDERED grid observation (2026-07-07): a recurring chartable measurement that
+// is NOT part of the standing q4h routine (glucose, rr) whose cadence resolves to
+// give-times that all fall on the timetable's q4h columns ("BSL QDS" → 08/12/16/20).
+// These materialise as a dynamic ROW in the routine grid — the ward's real CBG
+// chart — instead of loose worklist tasks. Cadences that don't fit the grid's
+// columns (TDS 14:00/22:00, Q6H 06:00/18:00) stay per-occurrence tasks. Returns
+// the day's slots, or null when the task isn't a grid-chartable order.
+export function gridObsOrderSlots(
+  task: NurseTask,
+  now: Date = new Date(),
+): RoutineSlot[] | null {
+  if (
+    !isObsType(task.obs_type) ||
+    (DEFAULT_ROUTINE as ObsType[]).includes(task.obs_type)
+  ) {
+    return null;
+  }
+  if (!isRecurringWhen(task.when)) return null;
+  const slots = todayMedSlots(task.when, now);
+  if (slots.length === 0) return null;
+  const gridHours = ROUTINE_SLOT_HOURS as readonly number[];
+  if (!slots.every((s) => gridHours.includes(s.hour))) return null;
+  return slots;
+}
+
 // Suppressed grid vitals that still carry patient-specific content (a cadence, a
 // timing note, or an escalation condition) must surface in Special Instructions —
 // otherwise suppressing the task would erase the order from both places. A bare
 // "monitor vitals" (no when, no conditions) adds nothing over the grid and stays out.
+// Ordered grid observations (glucose QDS) are likewise standing orders whose cadence
+// and conditions must stay visible while the grid does the charting.
 export function isGridSpecialInstruction(task: NurseTask): boolean {
-  if (!isRoutineCovered(task)) return false;
+  if (!isRoutineCovered(task) && gridObsOrderSlots(task) === null) return false;
   return !!(task.when?.trim() || task.conditions?.trim());
 }
 

@@ -45,15 +45,17 @@ export function isRoutine(task: Task): boolean {
 }
 
 // Materialised MAR cell (問題 2) — a per-slot medication administration, lives only
-// in the patient-window give-time grid (mirrors routine cells).
+// in the patient-window give-time grid (mirrors routine cells). MO-proposed
+// medication orders carry a med_key too (for the med-keyed safety nets) but are
+// worklist items, not grid cells — they keep riding the flat feeds.
 export function isMedCell(task: Task): boolean {
-  return task.med_key != null;
+  return task.med_key != null && task.proposed_by_mo !== true;
 }
 
 // Any timetable grid cell (routine vitals OR MAR give-times). The ad-hoc boards
 // exclude all of these — they belong to the patient-window grids, not the flat feed.
 export function isGridCell(task: Task): boolean {
-  return task.routine_key != null || task.med_key != null;
+  return task.routine_key != null || isMedCell(task);
 }
 
 export function isOpenForNurse(status: TaskStatus): boolean {

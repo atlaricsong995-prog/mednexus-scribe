@@ -18,24 +18,28 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_DOCTOR_ID } from "@/lib/constants";
 import { checkMedicationSafety } from "@/lib/safety";
 import {
-  DEFAULT_ROUTINE,
+  OBSERVATION_CATALOG,
   isObsType,
   medKey,
+  routineKey,
   todayMedSlots,
-  type ObsType,
 } from "@/lib/clinical/vocab";
 import {
+  gridObsOrderSlots,
   isRecurringWhen,
   isRoutineCovered,
   isStandingWatchOnly,
 } from "@/lib/clinical/obs-routing";
 import { ExtractSchema } from "@/lib/ai/schemas";
 import type {
+  Database,
   Medication,
   NurseTask,
   SafetyFlag,
   TaskType,
 } from "@/lib/supabase/types";
+
+type TaskInsert = Database["public"]["Tables"]["tasks"]["Insert"];
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -212,6 +216,34 @@ export async function POST(req: Request) {
     patient.allergies ?? [],
     (priorNote?.medications ?? []) as Medication[],
   );
+  // MO-proposed medication orders live as tasks, not chart meds, so the
+  // already-on-chart duplicate check above can't see them. Compare med_keys of
+  // the still-active proposals/orders directly — dictating a drug a resident has
+  // already proposed (or the attending already authorised) deserves a flag.
+  const { data: moMedTasks } = await supabase
+    .from("tasks")
+    .select("med_key, description, status")
+    .eq("patient_id", note.patient_id)
+    .eq("proposed_by_mo", true)
+    .not("med_key", "is", null)
+    .in("status", ["submitted", "pending", "in_progress"]);
+  const activeMoMedKeys = new Map(
+    (moMedTasks ?? []).map((t) => [t.med_key as string, t]),
+  );
+  for (const m of medications) {
+    const mo = activeMoMedKeys.get(medKey(m.drug));
+    if (!mo) continue;
+    if (recomputed.some((f) => f.type === "duplicate" && medKey(f.drug) === medKey(m.drug)))
+      continue;
+    recomputed.push({
+      type: "duplicate",
+      drug: m.drug,
+      reason: `Already an active resident order for this drug (${mo.description})${
+        mo.status === "submitted" ? " awaiting authorisation" : ""
+      }.`,
+      severity: "warning",
+    });
+  }
   const clientFlags = (parsed.data.safety_flags ?? []) as SafetyFlag[];
   const stillPrescribed = (drug: string) =>
     medications.some((m) => {
@@ -301,12 +333,14 @@ export async function POST(req: Request) {
   // old standing medication orders. Already-charted (approved) cells stay as history;
   // pending cells from earlier notes are cleared so the give-time grid reflects the
   // new orders (and the per-(patient,drug,slot) unique index can't collide on
-  // re-dispatch).
+  // re-dispatch). Note-scoped on purpose: MO-proposed orders carry a med_key but
+  // no note_id — an authorised one-off must survive an unrelated note confirm.
   await supabase
     .from("tasks")
     .delete()
     .eq("patient_id", note.patient_id)
     .not("med_key", "is", null)
+    .not("note_id", "is", null)
     .in("status", ["pending", "in_progress"]);
 
   // Cells that survived the supersede are already-charted history (the nurse
@@ -331,6 +365,18 @@ export async function POST(req: Request) {
   // (from its frequency). PRN / unknown frequencies get a single no-fixed-time cell
   // charted ad-hoc. Safety alert + override priority apply to EVERY cell of a
   // flagged drug, so the whole MAR row reads hot.
+  // An order only exists from the moment it is confirmed — give-times earlier
+  // today must NOT materialise (they'd render as "missed" doses for times the
+  // order didn't exist). A slot in the current hour still counts as due now.
+  const nowHour = new Date().getHours();
+  // Ordered after the day's last slot → one first-dose-now cell (ward practice:
+  // start the drug now, the schedule continues tomorrow via ensureTodayMeds).
+  const firstDoseNowIso = () => {
+    const d = new Date();
+    d.setMinutes(0, 0, 0);
+    return d.toISOString();
+  };
+
   const medicationRows = medications.flatMap((m) => {
     const flag = criticalFlags.find(
       (f) => overriddenCriticalDrugs.has(m.drug.toLowerCase()) && f.drug.toLowerCase() === m.drug.toLowerCase(),
@@ -338,9 +384,14 @@ export async function POST(req: Request) {
     const description = medicationDescription(m);
     const key = medKey(m.drug);
     const slots = todayMedSlots(m.frequency);
+    const remaining = slots.filter((s) => s.hour >= nowHour);
     // PRN / unknown frequency → one ad-hoc cell (scheduled_for null).
     const cells: (string | null)[] = (
-      slots.length > 0 ? slots.map((s) => s.iso) : [null]
+      slots.length === 0
+        ? [null]
+        : remaining.length > 0
+          ? remaining.map((s) => s.iso)
+          : [firstDoseNowIso()]
     ).filter(
       (iso) => iso === null || !chartedCells.has(`${key}|${Date.parse(iso)}`),
     );
@@ -383,6 +434,13 @@ export async function POST(req: Request) {
       !isStandingWatchOnly(t),
   );
 
+  // Ordered grid observations ("BSL QDS", 2026-07-07) become a dynamic ROW in the
+  // routine timetable — Malaysian wards chart CBG on a bedside grid chart, not as
+  // loose to-dos. They upsert against the routine unique index (a re-order must
+  // keep already-charted cells rather than collide), so they're batched apart
+  // from the plain insert rows.
+  const gridObsRows: TaskInsert[] = [];
+
   const nurseRows = materialisedNurseTasks.flatMap((t) => {
     const { scheduledFor, label } = parseWhen(t.when);
     const description = label ? `${t.task} (${label})` : t.task;
@@ -401,15 +459,36 @@ export async function POST(req: Request) {
       safety_alert: null as string | null,
       priority: t.priority,
     };
-    // Non-grid observations (glucose/rr) have no timetable row, so a recurring order
-    // ("BSL QDS") must fan out into one task PER occurrence — four checks are four
-    // completable items, not one. Reuses the MAR slot table: its token matching
-    // resolves free text like "QDS — pre-meals and bedtime" to real give-times.
-    // No resolvable slots → single task (status quo).
-    const nonGridObs =
-      isObsType(t.obs_type) && !(DEFAULT_ROUTINE as ObsType[]).includes(t.obs_type);
-    if (nonGridObs && isRecurringWhen(t.when)) {
-      const slots = todayMedSlots(t.when);
+    // Grid-chartable recurring order (glucose QDS) → timetable cells. Same
+    // "order exists from confirm onward" rule as the MAR: past slots don't
+    // materialise. Ordered after the day's last slot → one loose task tonight
+    // (the grid row starts tomorrow via ensureTodayObsOrders).
+    const gridSlots = gridObsOrderSlots(t);
+    if (gridSlots && isObsType(t.obs_type)) {
+      const obs = t.obs_type;
+      const remaining = gridSlots.filter((s) => s.hour >= nowHour);
+      if (remaining.length > 0) {
+        const spec = OBSERVATION_CATALOG[obs];
+        const rkey = routineKey(obs);
+        gridObsRows.push(
+          ...remaining.map((s) => ({
+            ...base,
+            description: `${spec.label} (ordered ${s.label})`,
+            routine_key: rkey,
+            scheduled_for: s.iso as string | null,
+          })),
+        );
+        return [];
+      }
+      return [{ ...base, scheduled_for: null }];
+    }
+    // Non-grid-compatible recurring observations (TDS/Q6H cadences) still fan out
+    // into one task PER occurrence — four checks are four completable items, not
+    // one. Reuses the MAR slot table: its token matching resolves free text like
+    // "QDS — pre-meals and bedtime" to real give-times. Remaining slots only; no
+    // resolvable slots (or none left today) → single task (status quo).
+    if (isObsType(t.obs_type) && isRecurringWhen(t.when)) {
+      const slots = todayMedSlots(t.when).filter((s) => s.hour >= nowHour);
       if (slots.length > 0) {
         return slots.map((s) => ({ ...base, scheduled_for: s.iso as string | null }));
       }
@@ -439,6 +518,29 @@ export async function POST(req: Request) {
       );
     }
     taskIds = (inserted ?? []).map((r) => r.id);
+  }
+
+  if (gridObsRows.length > 0) {
+    // ignoreDuplicates: an earlier note's cell for the same (patient, obs, slot)
+    // — charted or not — wins; only genuinely missing slots are created.
+    const { data: upserted, error: gridErr } = await supabase
+      .from("tasks")
+      .upsert(gridObsRows, {
+        onConflict: "patient_id,routine_key,scheduled_for",
+        ignoreDuplicates: true,
+      })
+      .select("id");
+    if (gridErr) {
+      return NextResponse.json(
+        {
+          error: `Note confirmed but grid dispatch failed: ${gridErr.message}`,
+          noteId,
+          status: "confirmed",
+        },
+        { status: 500 },
+      );
+    }
+    taskIds = [...taskIds, ...(upserted ?? []).map((r) => r.id)];
   }
 
   // 4. Audit log (append-only) — capture the override decision for governance.

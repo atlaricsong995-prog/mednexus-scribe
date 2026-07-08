@@ -12,25 +12,35 @@ import { WHISPER_MODEL } from "@/lib/constants";
 // clinical phrases, and Malay terms — cutting confusions like blood sugar ->
 // blood pressure. Keep it short (Whisper only honours ~224 tokens of prompt)
 // and in English, since this is the translations endpoint.
+// Groq rejects Whisper prompts over 896 CHARACTERS (not tokens) — the whole
+// request fails, no transcription at all. Budget: keep this base ≤ ~840 chars
+// so the per-recording "Patient: <name>." prefix always fits; buildPrompt
+// clamps as a last-resort guard.
 const WHISPER_PROMPT =
-  "Malaysian government hospital ward round dictation, code-switched English, Malay and Mandarin Chinese. " +
-  "Malay honorifics (titles before a patient's name, NOT verbs): Encik (Mr), Puan (Mrs), Cik (Ms), Tuan (Sir). " +
+  "Malaysian hospital ward round dictation, code-switched English, Malay and Mandarin. " +
+  "Honorifics before patient names: Encik, Puan, Cik, Tuan. " +
   // Every drug the demo ward can hear dictated — spelled as the chart spells it
   // (Furosemide, NOT the old "Frusemide": med_key matching is spelling-sensitive).
   "Medications: Metformin, Amlodipine, Augmentin, Amoxicillin, Paracetamol, Aspirin, " +
   "Insulin Actrapid, Furosemide, Ticagrelor, Atorvastatin, Salbutamol, Doxycycline, Bisoprolol, Omeprazole. " +
   "Clinical terms: blood pressure, blood sugar, capillary blood glucose, oxygen saturation, " +
-  "chest physiotherapy, chest X-ray, crackles, wheeze, post-op day, wound, dressing, systolic, diastolic. " +
-  "Malay terms: darah tinggi (hypertension), kencing manis (diabetes), demam (fever), sakit dada (chest pain). " +
-  "Mandarin terms: 血压 (blood pressure), 血糖 (blood sugar), 发烧 (fever), 胸痛 (chest pain), 胆囊 (gallbladder), 高血压 (hypertension), 糖尿病 (diabetes). " +
+  "chest physiotherapy, chest X-ray, crackles, wheeze, wound dressing. " +
+  "Malay: darah tinggi, kencing manis, demam. Mandarin: 血压, 血糖, 发烧, 高血压, 糖尿病. " +
   "Units: mmHg, mmol/L. Dosing: BD, TDS, QDS, OD, PRN, stat, units subcutaneously.";
+
+const GROQ_PROMPT_MAX_CHARS = 896;
 
 // Whisper biases strongly toward proper nouns it sees in the prompt, so naming the
 // actual patient (e.g. "Encik Lim Ah Kow") stops their honorific+name being heard
 // as a common medical word ("Encik" -> "inject"). Built per-recording.
 function buildPrompt(patientName?: string): string {
   const name = patientName?.trim();
-  return name ? `Patient: ${name}. ${WHISPER_PROMPT}` : WHISPER_PROMPT;
+  const prompt = name ? `Patient: ${name}. ${WHISPER_PROMPT}` : WHISPER_PROMPT;
+  // Hard clamp: over Groq's limit the API rejects the WHOLE transcription, so a
+  // truncated vocabulary tail is strictly better than no transcript.
+  return prompt.length > GROQ_PROMPT_MAX_CHARS
+    ? prompt.slice(0, GROQ_PROMPT_MAX_CHARS)
+    : prompt;
 }
 
 const MALAY_HONORIFICS = [

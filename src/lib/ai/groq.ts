@@ -15,11 +15,15 @@ import { WHISPER_MODEL } from "@/lib/constants";
 const WHISPER_PROMPT =
   "Malaysian government hospital ward round dictation, code-switched English, Malay and Mandarin Chinese. " +
   "Malay honorifics (titles before a patient's name, NOT verbs): Encik (Mr), Puan (Mrs), Cik (Ms), Tuan (Sir). " +
-  "Medications: Metformin, Amlodipine, Augmentin, Paracetamol, Insulin, Atorvastatin, Omeprazole, Frusemide. " +
-  "Clinical terms: blood pressure, blood sugar, capillary blood sugar, oxygen saturation, post-op day, wound, dressing, systolic, diastolic. " +
+  // Every drug the demo ward can hear dictated — spelled as the chart spells it
+  // (Furosemide, NOT the old "Frusemide": med_key matching is spelling-sensitive).
+  "Medications: Metformin, Amlodipine, Augmentin, Amoxicillin, Paracetamol, Aspirin, " +
+  "Insulin Actrapid, Furosemide, Ticagrelor, Atorvastatin, Salbutamol, Doxycycline, Bisoprolol, Omeprazole. " +
+  "Clinical terms: blood pressure, blood sugar, capillary blood glucose, oxygen saturation, " +
+  "chest physiotherapy, chest X-ray, crackles, wheeze, post-op day, wound, dressing, systolic, diastolic. " +
   "Malay terms: darah tinggi (hypertension), kencing manis (diabetes), demam (fever), sakit dada (chest pain). " +
   "Mandarin terms: 血压 (blood pressure), 血糖 (blood sugar), 发烧 (fever), 胸痛 (chest pain), 胆囊 (gallbladder), 高血压 (hypertension), 糖尿病 (diabetes). " +
-  "Units: mmHg, mmol/L. Dosing: BD, TDS, OD, PRN, stat.";
+  "Units: mmHg, mmol/L. Dosing: BD, TDS, QDS, OD, PRN, stat, units subcutaneously.";
 
 // Whisper biases strongly toward proper nouns it sees in the prompt, so naming the
 // actual patient (e.g. "Encik Lim Ah Kow") stops their honorific+name being heard

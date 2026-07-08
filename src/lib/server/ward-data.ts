@@ -28,8 +28,12 @@ export async function getWardData(
       // nets) but are worklist items, not MAR cells — without this exception the
       // attending's approval queue loses them on every page load (they only ever
       // appeared via realtime while the page happened to be open).
+      // Safety exceptions always pierce (f8fc764 doctrine): an override-dispensed
+      // allergy drug's MAR cells must reach the head nurse's critical banner on a
+      // fresh page load too, not only via realtime while the tower happened to be
+      // open. Clients still hide them from flat lists via isGridCell.
       .is("routine_key", null)
-      .or("med_key.is.null,proposed_by_mo.is.true")
+      .or("med_key.is.null,proposed_by_mo.is.true,safety_alert.not.is.null")
       .eq("ward", ward)
       .order("created_at", { ascending: false }),
   ]);

@@ -276,12 +276,20 @@ export async function resetBaseline(sb: AnyClient): Promise<ResetSummary> {
     newAdmission = true;
   }
 
-  // Clear the demo alert log (escalations + break-glass views, plus their
-  // acknowledgements) so the doctor/MO inboxes are empty on a fresh run.
+  // Clear the demo alert log (escalations, break-glass views and proposal
+  // rejections, plus their acknowledgements) so the doctor/MO inboxes are
+  // empty on a fresh run. Every alert kind an inbox renders must be listed
+  // here — a kind that survives reset resurrects forever, because the reset
+  // also deletes the alert_ack rows that would have hidden it.
   await sb
     .from("audit_log")
     .delete()
-    .in("action", ["escalation", "break_glass_view", "alert_ack"]);
+    .in("action", [
+      "escalation",
+      "break_glass_view",
+      "proposal_rejected",
+      "alert_ack",
+    ]);
 
   return { seeded, skipped, newAdmission };
 }

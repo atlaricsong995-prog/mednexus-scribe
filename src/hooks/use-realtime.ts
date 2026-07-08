@@ -103,14 +103,17 @@ export function useRealtimeTasks(
           // before the subscription was live never arrives as an event. Both
           // leave zombies (e.g. an approved task still showing "awaiting
           // approval"). Snapshot the same ad-hoc scope the pages fetch
-          // (ward-data.ts) and reconcile.
+          // (ward-data.ts — the filters MUST stay identical: a row the server
+          // render includes but this snapshot misses gets dropped as "removed"
+          // by the reconcile below, flashing on load then vanishing) and
+          // reconcile.
           const snapshotAt = new Date().toISOString();
           void supabase
             .from("tasks")
             .select("*")
             .eq("ward", ward)
             .is("routine_key", null)
-            .is("med_key", null)
+            .or("med_key.is.null,proposed_by_mo.is.true,safety_alert.not.is.null")
             .order("created_at", { ascending: false })
             .then(({ data }) => {
               if (!data || channelRef.current !== channel) return;

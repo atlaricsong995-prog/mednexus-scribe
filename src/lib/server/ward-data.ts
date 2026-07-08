@@ -24,8 +24,12 @@ export async function getWardData(
       .select("*")
       // Grid cells (routine vitals + MAR give-times) live only in the patient
       // window — keep the ad-hoc worklist / control tower / approvals feed clean.
+      // MO-proposed medications carry a med_key too (for the med-keyed safety
+      // nets) but are worklist items, not MAR cells — without this exception the
+      // attending's approval queue loses them on every page load (they only ever
+      // appeared via realtime while the page happened to be open).
       .is("routine_key", null)
-      .is("med_key", null)
+      .or("med_key.is.null,proposed_by_mo.is.true")
       .eq("ward", ward)
       .order("created_at", { ascending: false }),
   ]);

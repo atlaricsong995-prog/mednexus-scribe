@@ -43,7 +43,12 @@ export async function POST(
     .eq("id", alertId)
     .maybeSingle();
 
-  if (!alert || (alert.action !== "escalation" && alert.action !== "break_glass_view")) {
+  if (
+    !alert ||
+    (alert.action !== "escalation" &&
+      alert.action !== "break_glass_view" &&
+      alert.action !== "proposal_rejected")
+  ) {
     return NextResponse.json({ error: "Alert not found." }, { status: 404 });
   }
 

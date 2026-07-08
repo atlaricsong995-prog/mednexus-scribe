@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { BellRing, Check, ClipboardPen, Mic } from "lucide-react";
+import { AlertTriangle, BellRing, Check, ClipboardPen, Mic, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { HighlightOnMount } from "@/components/highlight-on-mount";
@@ -36,6 +36,11 @@ export function ApprovalsPanel({
   const { toast } = useToast();
   const patientMap = useMemo(() => buildPatientMap(patients), [patients]);
   const [approving, setApproving] = useState<string | null>(null);
+  // Reject-with-reason (2E): which proposal's reason box is open, its text, and
+  // the in-flight submit. One box at a time — rejecting is a deliberate act.
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectBusy, setRejectBusy] = useState(false);
 
   const notifySubmission = (task: Task) => {
     const p = patientMap.get(task.patient_id);
@@ -104,13 +109,45 @@ export function ApprovalsPanel({
     }
   }
 
+  // Reject a resident proposal with a mandatory reason. The status flips to
+  // 'rejected' server-side; the realtime UPDATE drops it from every open queue,
+  // and the audit row notifies the MO's inbox with the why.
+  async function reject(taskId: string) {
+    const reason = rejectReason.trim();
+    if (!reason) return;
+    setRejectBusy(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not reject.");
+      toast({
+        title: "Proposal rejected",
+        description: "The resident has been notified with your reason.",
+      });
+      setRejectingId(null);
+      setRejectReason("");
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Reject failed",
+        description: err instanceof Error ? err.message : "Unknown error.",
+      });
+    } finally {
+      setRejectBusy(false);
+    }
+  }
+
   const row = (t: Task, kind: "proposal" | "completion") => {
     const p = patientMap.get(t.patient_id);
     return (
       <HighlightOnMount key={t.id}>
         <div
           className={cn(
-            "flex items-center justify-between gap-3 rounded-lg border bg-white p-3",
+            "rounded-lg border bg-white p-3",
             t.abnormal
               ? "border-red-300"
               : t.proposed_by_mo
@@ -118,6 +155,7 @@ export function ApprovalsPanel({
                 : "border-amber-200",
           )}
         >
+          <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-slate-900">
               {t.description}
@@ -145,6 +183,14 @@ export function ApprovalsPanel({
                 Rationale: {t.completion_notes}
               </p>
             )}
+            {/* Already-on-chart duplicate warning (2E) — computed at propose time;
+                the attending must see it BEFORE authorising a double order. */}
+            {kind === "proposal" && t.safety_alert && (
+              <p className="mt-0.5 flex items-start gap-1 text-xs font-medium text-red-700">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                {t.safety_alert}
+              </p>
+            )}
             {/* Abnormal value the nurse flagged — let the doctor act on it (not just
                 acknowledge) by jumping straight to dictating a new order (問題 3d). */}
             {t.abnormal && p && (
@@ -161,19 +207,76 @@ export function ApprovalsPanel({
               </p>
             )}
           </div>
-          <Button
-            size="sm"
-            onClick={() => approve(t.id, kind)}
-            disabled={approving === t.id}
-            className="shrink-0"
-          >
-            {approving === t.id ? (
-              <PulseLoader className="text-current" />
-            ) : (
-              <Check className="h-4 w-4" />
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* Rejecting is the attending's other verb (2E) — only a proposal
+                still awaiting authorisation can be rejected. */}
+            {kind === "proposal" && rejectingId !== t.id && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setRejectingId(t.id);
+                  setRejectReason("");
+                }}
+                disabled={approving === t.id}
+                className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+              >
+                <X className="h-4 w-4" />
+                Reject
+              </Button>
             )}
-            {kind === "proposal" ? "Authorise" : "Acknowledge"}
-          </Button>
+            <Button
+              size="sm"
+              onClick={() => approve(t.id, kind)}
+              disabled={approving === t.id || rejectingId === t.id}
+            >
+              {approving === t.id ? (
+                <PulseLoader className="text-current" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              {kind === "proposal" ? "Authorise" : "Acknowledge"}
+            </Button>
+          </div>
+          </div>
+          {/* Mandatory reason — the rejection reaches the resident's inbox
+              carrying the why, and lands append-only in the audit log. */}
+          {kind === "proposal" && rejectingId === t.id && (
+            <div className="mt-2 flex items-center gap-2 border-t border-red-100 pt-2">
+              <input
+                autoFocus
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && rejectReason.trim() && !rejectBusy) {
+                    void reject(t.id);
+                  }
+                  if (e.key === "Escape") setRejectingId(null);
+                }}
+                placeholder="Reason for rejection (required — sent to the resident)"
+                className="h-8 min-w-0 flex-1 rounded-md border border-red-200 bg-red-50/50 px-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-red-300"
+              />
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => reject(t.id)}
+                disabled={!rejectReason.trim() || rejectBusy}
+                className="shrink-0"
+              >
+                {rejectBusy ? <PulseLoader className="text-current" /> : <X className="h-4 w-4" />}
+                Reject order
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setRejectingId(null)}
+                disabled={rejectBusy}
+                className="shrink-0"
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
         </div>
       </HighlightOnMount>
     );

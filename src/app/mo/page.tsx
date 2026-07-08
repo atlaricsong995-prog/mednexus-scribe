@@ -29,9 +29,10 @@ export default async function MoPage({
   // record-access alerts are the attending's oversight duty — not shown to the MO.
   const [{ patients, tasks }, initialAlerts] = await Promise.all([
     getWardData(WARD),
-    // Escalations only (break-glass is attending-only), minus the MO's own —
-    // you don't get notified of an escalation you raised yourself.
-    getRecentAlerts(["escalation"], "mo"),
+    // Escalations + the attending's proposal rejections (break-glass is
+    // attending-only), minus the MO's own — you don't get notified of an
+    // escalation you raised yourself.
+    getRecentAlerts(["escalation", "proposal_rejected"], "mo"),
   ]);
 
   const data = bed ? await getPatientWindowData(WARD, bed, role) : null;
@@ -49,7 +50,7 @@ export default async function MoPage({
       <DoctorAlerts
         patients={patients}
         initialAlerts={initialAlerts}
-        kinds={["escalation"]}
+        kinds={["escalation", "proposal_rejected"]}
         excludeActorRole="mo"
       />
 

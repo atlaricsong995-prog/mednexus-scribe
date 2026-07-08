@@ -7,6 +7,7 @@
 // server-side with the service-role client (the demo has no auth session).
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRole } from "@/lib/server/role";
+import { findActiveDuplicate } from "@/lib/server/duplicate-check";
 import { WARD } from "@/lib/constants";
 import { medKey } from "@/lib/clinical/vocab";
 import type { TaskPriority, TaskType } from "@/lib/supabase/types";
@@ -17,6 +18,10 @@ const PRIORITIES: TaskPriority[] = ["low", "normal", "high", "critical"];
 export interface ProposeResult {
   ok: boolean;
   error?: string;
+  // Advisory already-on-chart warning (2E): the proposal went through, but the
+  // drug duplicates the active chart / an open resident order. Shown to the MO
+  // as a toast; the same text rides the task's safety_alert to the attending.
+  duplicateWarning?: string;
 }
 
 export async function proposeOrder(input: {
@@ -56,6 +61,14 @@ export async function proposeOrder(input: {
   const proposedMedKey =
     taskType === "medication" && drugName ? medKey(drugName) : null;
 
+  // Already-on-chart / already-proposed duplicate check (2E). Advisory, not a
+  // block: the proposal still goes through, but the warning rides safety_alert
+  // so the attending sees it on the approval card before authorising.
+  const duplicateWarning =
+    proposedMedKey && drugName
+      ? await findActiveDuplicate(input.patientId, drugName)
+      : null;
+
   const supabase = createAdminClient();
   const { error } = await supabase.from("tasks").insert({
     note_id: null,
@@ -65,6 +78,7 @@ export async function proposeOrder(input: {
     description,
     med_key: proposedMedKey,
     proposed_by_mo: true,
+    safety_alert: duplicateWarning,
     priority,
     // Rationale rides completion_notes (no schema change) — the approval card already
     // renders it; surfaced to the attending as the resident's "why".
@@ -88,8 +102,9 @@ export async function proposeOrder(input: {
       description,
       task_type: taskType,
       rationale,
+      duplicate_warning: duplicateWarning,
     },
   });
 
-  return { ok: true };
+  return { ok: true, duplicateWarning: duplicateWarning ?? undefined };
 }

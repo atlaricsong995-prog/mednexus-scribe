@@ -13,7 +13,7 @@ export interface AlertRow {
   created_at: string;
 }
 
-export type AlertKind = "break_glass_view" | "escalation";
+export type AlertKind = "break_glass_view" | "escalation" | "proposal_rejected";
 
 // `kinds` scopes the inbox to the viewer's role: break-glass record-access
 // alerts are the attending's to review, so the MO inbox requests escalations only.

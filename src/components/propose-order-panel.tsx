@@ -101,10 +101,21 @@ export function ProposeOrderPanel({ patientId }: { patientId: string }) {
         drug: isMed ? drug.trim() : undefined,
       });
       if (!res.ok) throw new Error(res.error ?? "Could not propose order.");
-      toast({
-        title: "Order proposed",
-        description: "Sent to the attending for approval.",
-      });
+      // Advisory duplicate warning (2E): the proposal went through, but the drug
+      // is already on the chart / already proposed — tell the MO now, and the
+      // same warning rides the approval card to the attending.
+      if (res.duplicateWarning) {
+        toast({
+          variant: "destructive",
+          title: "Proposed — possible duplicate",
+          description: `${res.duplicateWarning} The attending sees this warning on the approval card.`,
+        });
+      } else {
+        toast({
+          title: "Order proposed",
+          description: "Sent to the attending for approval.",
+        });
+      }
       reset();
       router.refresh();
     } catch (err) {

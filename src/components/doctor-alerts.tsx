@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ShieldAlert, BellRing, Check } from "lucide-react";
+import { ShieldAlert, BellRing, Check, FileX2 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -11,7 +11,7 @@ import type { AlertKind, AlertRow } from "@/lib/server/alerts-data";
 
 interface AlertEntry {
   id: string;
-  action: "break_glass_view" | "escalation";
+  action: "break_glass_view" | "escalation" | "proposal_rejected";
   who: string;
   patientId?: string;
   text: string;
@@ -39,7 +39,12 @@ function toEntry(row: AlertRow): AlertEntry {
       : ((meta.message as string) ?? "Requesting attending review.");
   return {
     id: row.id,
-    action: row.action === "escalation" ? "escalation" : "break_glass_view",
+    action:
+      row.action === "escalation"
+        ? "escalation"
+        : row.action === "proposal_rejected"
+          ? "proposal_rejected"
+          : "break_glass_view",
     who,
     patientId,
     text,
@@ -142,9 +147,11 @@ export function DoctorAlerts({
             title:
               entry.action === "break_glass_view"
                 ? "🔓 Break-glass record access"
-                : entry.critical
-                  ? "🚨 Critical vital — auto-escalation"
-                  : "🔔 Escalation to attending",
+                : entry.action === "proposal_rejected"
+                  ? "📋 Proposal rejected by the attending"
+                  : entry.critical
+                    ? "🚨 Critical vital — auto-escalation"
+                    : "🔔 Escalation to attending",
             description: `${entry.who} — ${where}${
               entry.text ? ` — “${entry.text}”` : ""
             }`,
@@ -212,7 +219,9 @@ export function DoctorAlerts({
         {entries.length} alert{entries.length === 1 ? "" : "s"} —{" "}
         {kinds.includes("break_glass_view")
           ? "break-glass & escalations"
-          : "escalations"}
+          : kinds.includes("proposal_rejected")
+            ? "escalations & rejected proposals"
+            : "escalations"}
       </h2>
       <ul className="space-y-1.5">
         {entries.map((e) => {
@@ -227,11 +236,15 @@ export function DoctorAlerts({
                   "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
                   e.action === "break_glass_view"
                     ? "bg-amber-100 text-amber-700"
-                    : "bg-red-100 text-red-700",
+                    : e.action === "proposal_rejected"
+                      ? "bg-slate-100 text-slate-600"
+                      : "bg-red-100 text-red-700",
                 )}
               >
                 {e.action === "break_glass_view" ? (
                   <ShieldAlert className="h-3 w-3" />
+                ) : e.action === "proposal_rejected" ? (
+                  <FileX2 className="h-3 w-3" />
                 ) : (
                   <BellRing className="h-3 w-3" />
                 )}
@@ -242,9 +255,11 @@ export function DoctorAlerts({
                   {" · "}
                   {e.action === "break_glass_view"
                     ? "opened a masked record"
-                    : e.critical
-                      ? "auto-escalated (critical vital)"
-                      : "escalated"}
+                    : e.action === "proposal_rejected"
+                      ? "rejected your proposed order"
+                      : e.critical
+                        ? "auto-escalated (critical vital)"
+                        : "escalated"}
                   {p ? ` — Bed ${p.bed_number} · ${p.full_name}` : ""}
                 </p>
                 <p className="text-slate-500">

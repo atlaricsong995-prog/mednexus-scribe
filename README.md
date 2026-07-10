@@ -1,8 +1,10 @@
-# MedNexus Scribe
+# MEDJ AI (Medical Jaga AI)
 
+> *jaga* — Malay for "to watch over."
+>
 > Malaysia's multilingual ambient AI scribe — closing the loop between the
 > doctor's voice, the nurse's tasks, and the patient's record, with built-in
-> clinical governance.
+> clinical governance. Formerly "MedNexus Scribe".
 
 MVP wedge for the **MAIC Nexus Challenge 2026** (Track T2 — AI for Healthcare).
 

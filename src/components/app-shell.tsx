@@ -36,7 +36,7 @@ export function AppShell({
             <span className="flex h-7 w-7 items-center justify-center rounded-md bg-glow/15 text-glow">
               <Activity className="h-4 w-4" />
             </span>
-            <span className="tracking-tight">MedNexus Scribe</span>
+            <span className="tracking-tight">MEDJ AI</span>
           </Link>
           <span className="hidden text-sm text-chrome-foreground/60 sm:inline">
             {subtitle ?? "Ward 5A"}

@@ -1,4 +1,4 @@
-// Database types for MedNexus Scribe.
+// Database types for MEDJ AI (Medical Jaga AI).
 // Hand-written to match supabase/migrations/001_initial_schema.sql (Tech Spec §2.1).
 // Regenerate with `supabase gen types typescript` once the CLI is linked.
 

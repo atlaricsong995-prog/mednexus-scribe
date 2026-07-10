@@ -80,10 +80,10 @@ export default function LandingPage() {
           MAIC Nexus Challenge 2026 · Ward 5A
         </p>
         <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-          MEDJ AI
+          1MED AI
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-balance text-slate-600">
-          Medical Jaga AI — Malaysia&apos;s multilingual ambient AI scribe,
+          One Malaysia Medical AI — Malaysia&apos;s multilingual ambient AI scribe,
           closing the loop between the doctor&apos;s voice, the nurse&apos;s
           tasks, and the patient&apos;s record.
         </p>

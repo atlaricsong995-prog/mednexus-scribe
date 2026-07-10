@@ -15,9 +15,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "MEDJ AI",
+  title: "1MED AI",
   description:
-    "MEDJ AI (Medical Jaga AI) — multilingual ambient AI scribe for Malaysian hospital wards.",
+    "1MED AI (One Malaysia Medical AI) — multilingual ambient AI scribe for Malaysian hospital wards.",
 };
 
 export default function RootLayout({

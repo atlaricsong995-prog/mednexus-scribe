@@ -1,10 +1,10 @@
-# MEDJ AI (Medical Jaga AI)
+# 1MED AI (One Malaysia Medical AI)
 
-> *jaga* — Malay for "to watch over."
+> One Malaysia, one medical AI — watching over every order.
 >
 > Malaysia's multilingual ambient AI scribe — closing the loop between the
 > doctor's voice, the nurse's tasks, and the patient's record, with built-in
-> clinical governance. Formerly "MedNexus Scribe".
+> clinical governance. Formerly "MedNexus Scribe" / "MEDJ AI".
 
 MVP wedge for the **MAIC Nexus Challenge 2026** (Track T2 — AI for Healthcare).
 

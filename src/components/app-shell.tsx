@@ -31,7 +31,7 @@ export function AppShell({
     <div className="min-h-screen bg-background">
       {/* Dark chrome top bar */}
       <header className="sticky top-0 z-30 bg-chrome text-chrome-foreground shadow-sm">
-        <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-4 px-4">
+        <div className="flex h-14 w-full items-center gap-4 px-4">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <span className="flex h-7 w-7 items-center justify-center rounded-md bg-glow/15 text-glow">
               <Activity className="h-4 w-4" />
@@ -56,7 +56,7 @@ export function AppShell({
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-7xl">
+      <div className="flex w-full">
         {/* Optional slim side rail — collapses to icons under lg */}
         {navItems && navItems.length > 0 ? (
           <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 flex-col gap-1 bg-chrome/95 px-2 py-4 text-chrome-foreground sm:flex">
@@ -81,21 +81,23 @@ export function AppShell({
 
         {/* Light content area — page markup unchanged, just re-parented */}
         <main className="min-w-0 flex-1 px-4 py-8">
-          <div className="mb-6 flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-chrome text-chrome-foreground">
-              <Icon className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                {roleLabel}
-              </p>
-              <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-              {subtitle ? (
-                <p className="text-sm text-muted-foreground">{subtitle}</p>
-              ) : null}
+          <div className="mx-auto w-full max-w-7xl">
+            <div className="mb-6 flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-chrome text-chrome-foreground">
+                <Icon className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                  {roleLabel}
+                </p>
+                <h1 className="text-2xl font-bold text-foreground">{title}</h1>
+                {subtitle ? (
+                  <p className="text-sm text-muted-foreground">{subtitle}</p>
+                ) : null}
+              </div>
             </div>
+            {children}
           </div>
-          {children}
         </main>
       </div>
     </div>

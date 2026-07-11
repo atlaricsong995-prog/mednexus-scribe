@@ -17,7 +17,7 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "1MED AI",
   description:
-    "1MED AI (One Malaysia Medical AI) — multilingual ambient AI scribe for Malaysian hospital wards.",
+    "1MED AI (One Malaysia Medical AI) — closed-loop order dispatch for Malaysian hospital wards. Speak or type an order in any language; it is safety-checked, dispatched to the nurse, and permanently logged. No EMR required.",
 };
 
 export default function RootLayout({

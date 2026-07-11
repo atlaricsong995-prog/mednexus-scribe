@@ -2,9 +2,13 @@
 
 > One Malaysia, one medical AI — watching over every order.
 >
-> Malaysia's multilingual ambient AI scribe — closing the loop between the
-> doctor's voice, the nurse's tasks, and the patient's record, with built-in
-> clinical governance. Formerly "MedNexus Scribe" / "MEDJ AI".
+> Closed-loop order dispatch for paper wards. A doctor speaks — or types — one
+> order, in any mix of Malaysia's four languages. It is safety-checked,
+> dispatched to the nurse in under two seconds, signed at the bedside,
+> escalated when missed, and permanently logged. No EMR required.
+>
+> Not an ambient scribe: we do not record the consultation. Formerly
+> "MedNexus Scribe" / "MEDJ AI".
 
 MVP wedge for the **MAIC Nexus Challenge 2026** (Track T2 — AI for Healthcare).
 

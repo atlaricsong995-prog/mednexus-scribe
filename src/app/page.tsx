@@ -83,9 +83,10 @@ export default function LandingPage() {
           1MED AI
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-balance text-slate-600">
-          One Malaysia Medical AI — Malaysia&apos;s multilingual ambient AI scribe,
-          closing the loop between the doctor&apos;s voice, the nurse&apos;s
-          tasks, and the patient&apos;s record.
+          One Malaysia Medical AI — a doctor speaks, or types, one order in any
+          mix of Malaysia&apos;s four languages. It is safety-checked, dispatched
+          to the nurse in under two seconds, signed at the bedside, and
+          permanently logged. No EMR required.
         </p>
       </div>
 

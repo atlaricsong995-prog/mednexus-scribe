@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  // Two input modes share this pipeline: a saved Whisper transcription
+  // Two input modes share this pipeline: a saved speech-to-text transcription
   // (transcriptionId) or a note the doctor typed directly (typedText). Typed
   // notes skip transcribe entirely; everything downstream (extraction, safety
   // flags, right-patient check) is identical.

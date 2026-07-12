@@ -19,6 +19,9 @@ export const DEMO_DOCTOR_NAME = "Attending";
 export const AUDIO_BUCKET = "audio-recordings";
 
 // AI model ids (single source of truth — Tech Spec §4, D-009).
-// LLM is Google Gemini, NOT Anthropic (D-009). STT is Groq Whisper.
+// LLM is Google Gemini, NOT Anthropic (D-009). STT is Gemini too, as of 2026-07-12:
+// Whisper locks one language for a whole clip, so intra-sentence BM/EN/Mandarin
+// code-switching (normal Malaysian ward speech) came back as Chinese transliteration
+// of the Malay. Gemini has no such lock. See src/lib/ai/stt.ts.
 export const GEMINI_MODEL = "gemini-3-flash-preview";
-export const WHISPER_MODEL = "whisper-large-v3";
+export const STT_MODEL = "gemini-3-flash-preview";

@@ -49,7 +49,7 @@ function norm(s: string): string {
   return (s ?? "").toLowerCase();
 }
 
-// Whisper sometimes glues spoken tokens into one word — a real transcript
+// Speech-to-text sometimes glues spoken tokens into one word — a real transcript
 // contained "Mr. StrongBed17" for "Mrs. Chong, bed 17", which defeats every
 // \b-anchored pattern below. Split camelCase and letter↔digit seams first
 // (must run BEFORE lowercasing, which erases the case boundary).

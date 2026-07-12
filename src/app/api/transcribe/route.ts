@@ -1,12 +1,12 @@
 // POST /api/transcribe (Tech Spec §3.1)
-// Downloads the persisted audio artifact, runs Groq Whisper -> English, and saves
-// the transcriptions row. Runs server-side with the service-role admin client
-// (the demo has no Supabase auth session, so anon writes are blocked by RLS).
+// Downloads the persisted audio artifact, runs Gemini speech-to-text -> English,
+// and saves the transcriptions row. Runs server-side with the service-role admin
+// client (the demo has no Supabase auth session, so anon writes are blocked by RLS).
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { transcribeToEnglish } from "@/lib/ai/groq";
-import { AUDIO_BUCKET, WHISPER_MODEL } from "@/lib/constants";
+import { transcribeToEnglish } from "@/lib/ai/stt";
+import { AUDIO_BUCKET, STT_MODEL } from "@/lib/constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Patient name biases Whisper toward the honorific+name ("Encik Lim Ah Kow")
+  // Patient name biases the model toward the honorific+name ("Encik Lim Ah Kow")
   // instead of mishearing it as a common medical word. Best-effort — transcribe
   // still proceeds without it.
   let patientName: string | undefined;
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     patientName = patientRow?.full_name ?? undefined;
   }
 
-  // Whisper translation (retry once, then fail — Tech Spec §3.1).
+  // Speech-to-text (retry once, then fail — Tech Spec §3.1).
   let transcript: { text: string; language: string | null };
   try {
     transcript = await transcribeToEnglish(blob, blob.type || "audio/webm", patientName);
@@ -86,7 +86,9 @@ export async function POST(req: Request) {
       audio_id: audioId,
       raw_text: transcript.text,
       source_language: transcript.language,
-      whisper_model: WHISPER_MODEL,
+      // Column is still named whisper_model — kept as-is on purpose: renaming it
+      // would mean a migration, and the value is what actually matters.
+      whisper_model: STT_MODEL,
     })
     .select("id")
     .single();

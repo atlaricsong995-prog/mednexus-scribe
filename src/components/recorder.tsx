@@ -23,7 +23,7 @@ function fmt(total: number): string {
 }
 
 // Pipeline phases after the doctor stops recording (Day 3, Task 3.4):
-// upload → transcribe (Groq) → extract (Gemini) → review cards.
+// upload → transcribe (Gemini) → extract (Gemini) → review cards.
 type Phase =
   | "uploading"
   | "transcribing"
@@ -55,7 +55,7 @@ export function Recorder({ patientId }: { patientId: string }) {
   const [phase, setPhase] = useState<Phase>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [note, setNote] = useState<NoteReviewData | null>(null);
-  // Input mode: dictate (mic → Whisper) or type the note directly. Typed text
+  // Input mode: dictate (mic → Gemini STT) or type the note directly. Typed text
   // skips transcription and feeds the same extract pipeline — it doubles as the
   // fallback when the mic/browser lets us down.
   const [mode, setMode] = useState<"voice" | "typed">("voice");

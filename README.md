@@ -28,7 +28,7 @@ routes into each port (real auth is out of MVP scope).
 - **Next.js 14** (App Router) + TypeScript
 - **Tailwind CSS 3** + shadcn/ui (Radix)
 - **Supabase** — Postgres + Auth + Realtime + Storage
-- **Groq Whisper** (`whisper-large-v3`) for speech-to-text
+- **Google Gemini 3 Flash** (native audio) for speech-to-text — handles English/Malay/Mandarin mixed *within a single sentence*, which Whisper cannot: it locks one language per clip. See `src/lib/ai/stt.ts`.
 - **Google Gemini 3 Flash** for structured clinical extraction
 - Deployed on **Vercel** + **Supabase Cloud**
 
@@ -36,12 +36,11 @@ routes into each port (real auth is out of MVP scope).
 
 ```bash
 pnpm install
-cp .env.example .env.local   # fill in Supabase + Groq + Gemini keys
+cp .env.example .env.local   # fill in Supabase + Gemini keys
 pnpm dev                     # http://localhost:3000
 ```
 
 ## Environment Variables
 
 See `.env.example`. Required: `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`,
-`GEMINI_API_KEY`.
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`.

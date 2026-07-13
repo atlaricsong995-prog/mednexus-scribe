@@ -84,7 +84,7 @@ export default function LandingPage() {
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-balance text-slate-600">
           One Malaysia Medical AI — a doctor speaks, or types, one order in any
-          mix of Malaysia&apos;s four languages. It is safety-checked, dispatched
+          mix of BM, English, and Mandarin. It is safety-checked, dispatched
           to the nurse in under two seconds, signed at the bedside, and
           permanently logged. No EMR required.
         </p>

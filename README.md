@@ -39,6 +39,29 @@ the demo is driven). The landing page (`/`) is a demo role-picker; the `role` co
 it sets survives only as a fallback for a bare `/patient/[bed]` visit. Not production
 auth — a demonstration of the access model (real auth is out of MVP scope).
 
+## See the loop close (2 minutes)
+
+On [1med-ai.vercel.app](https://1med-ai.vercel.app), click **Reset demo data**, then open
+**Doctor** and **Nurse** in two tabs side by side (the route is the role, so one browser
+is enough). In the Doctor tab open **Bed 12** — Encik Lim, penicillin-allergic, already
+on Metformin — press **Record** and say (or use the **Type** tab, same pipeline):
+
+> This is Mr. Lim, bed twelve. He is day two after his gallbladder operation. He now has
+> a cough and a mild fever. Assessment: a chest infection on top of his diabetes. Plan:
+> start Augmentin one gram three times a day for five days. Continue his Metformin one
+> thousand five hundred milligrams twice a day. Also start Insulin Actrapid ten units
+> subcutaneously, stat.
+
+**Augmentin comes back framed red** — it is a penicillin, and he is allergic. That is a
+hard stop: the system will not dispatch until you tick the override and *type a clinical
+reason*, which then follows the drug to the nurse's screen and into the audit log.
+Metformin comes back amber — he is already on it. Confirm, and the orders reach the
+Nurse tab in about two seconds.
+
+The safety verdicts are deterministic app code, not the LLM. Full 15-minute walkthrough
+(all four ports, escalation, break-glass, append-only record): see the judge demo script
+in the submission pack.
+
 ## Tech Stack
 
 - **Next.js 14** (App Router) + TypeScript
